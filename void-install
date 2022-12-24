@@ -1,0 +1,187 @@
+#!/usr/bin/env bash
+
+dir_install='/mnt/voidlinux'
+
+sh_config() {
+	source minimal.cfg
+	if [[ $_CONFIG != 1 ]]; then
+		echo -e "\E[1m\E[31m=> \E[00mminimal.cfg is not valid!"
+		exit 1
+	fi
+	cat minimal.cfg
+}
+
+conf()
+{
+	read -p "$1 [Y/n]"
+	[[ ${REPLY^} == "" ]] && return 0
+	[[ ${REPLY^} == N ]]  && return 1 || return 0
+}
+
+sh_mkparted(){
+	fdisk -l $_DEVICE
+	echo
+	echo "AVISO, CUIDADO, tudo será apagado!!"
+	if conf "Continuar com o particionamento?" ; then
+	   parted --script "$_DEVICE" --                                        \
+	      mklabel gpt                                                       \
+	      mkpart primary fat32      1MiB 3MiB   set 1 bios on name 1 BIOS   \
+	      mkpart primary fat32      3MiB 128MiB set 2 esp  on name 2 EFI    \
+	      mkpart primary ext4       128MiB 100%               name 3 ROOT   \
+	      align-check optimal 1
+	      parted --script "$_DEVICE" -- print
+	fi
+}
+
+sh_update_mirror(){
+	cat > "$dir_install/etc/xbps.d/00-reposytory-main.conf" <<-'_EOF_'
+repository=http://void.chililinux.com/voidlinux/current
+#repository=http://void.chililinux.com/voidlinux/extras
+repository=http://void.chililinux.com/voidlinux/current/nonfree
+repository=http://void.chililinux.com/voidlinux/current/multilib
+repository=http://void.chililinux.com/voidlinux/current/multilib/nonfree
+_EOF_
+}
+
+sh_update_rc() {
+	cat > "$dir_install/etc/rc.local" <<-'_EOF_'
+HOSTNAME="${_HOSTNAME}"
+HARDWARECLOCK="${_CLOCK}"
+TIMEZONE="${_TIMEZONE}"
+KEYMAP="${_KEYMAP}"
+_EOF_
+}
+
+sh_update_locale() {
+	cat > "$dir_install/etc/locale.conf" <<-'_EOF_'
+LANG=en_US.UTF-8
+LC_COLLATE=C
+LC_ALL=en_US.UTF-8
+_EOF_
+}
+
+sh_update_hostname() {
+	echo "${_HOSTNAME}" > $dir_install/etc/hostname
+}
+
+sh_update_timezone(){
+	sed -e "/en_US.UTF-8 UTF-8/s/^\#//" -i $dir_install/etc/default/libc-locales
+	ln -s $dir_install/usr/share/zoneinfo/"${_TIMEZONE}" $dir_install/etc/localtime
+}
+
+sh_config
+sh_mkparted
+umount -rl /mnt/voidlinux
+mkfs.ext2 -F "${_BOOT}"
+mkfs.ext4 -F "${_ROOT}"
+
+mkdir -p '/mnt/voidlinux'
+adir=("$dir_install/boot"
+		"$dir_install/dev"
+		"$dir_install/proc"
+		"$dir_install/sys"
+		"$dir_install/var/db/xbps/keys"
+		"$dir_install/etc/xbps.d"
+	)
+
+mount -t ext4 "${_ROOT}" /mnt/voidlinux
+for dir in "${adir[@]}"
+do
+	echo $dir
+	[[ -d "$dir" ]] || mkdir -p "$dir"
+done
+mount -t ext2 "${_BOOT}" $dir_install/boot
+mount -t proc /proc $dir_install/proc
+mount -t sysfs /sys $dir_install/sys
+mount -o bind /dev $dir_install/dev
+
+#xbps-install -Sy tar xz
+tar xpf "$_IMAGE" --xattrs-include='*.*' --numeric-owner -C $dir_install
+cp -L /etc/resolv.conf $dir_install/etc/
+sh_update_mirror
+#chroot /mnt/voidlinu
+chroot "$dir_install" /bin/bash -c "xbps-install -Syu"
+chroot "$dir_install" /bin/bash -c "xbps-install -y base-minimal xbps kmod"
+chroot "$dir_install" /bin/bash -c "xbps-install -y e2fsprogs dosfstools sudo iproute2 iputils"
+chroot "$dir_install" /bin/bash -c "xbps-install -y dhcpcd wpa_supplicant iw ncurses kbd mdocml"
+chroot "$dir_install" /bin/bash -c "xbps-install -y man-pages vim nano grub efivar efibootmgr"
+chroot "$dir_install" /bin/bash -c "xbps-install -y syslinux mkinitcpio mkinitcpio-udev"
+chroot "$dir_install" /bin/bash -c "xbps-install -y man-pages vim nano grub efivar efibootmgr"
+chroot "$dir_install" /bin/bash -c "xbps-install -y linux linux-headers"
+chroot "$dir_install" /bin/bash -c "grub-install $_DEVICE"
+chroot "$dir_install" /bin/bash -c "grub-mkconfig -o /boot/grub/grub.cfg"
+sh_update_hostname
+sh_update_rc
+sh_update_locale
+sh_update_timezone
+umount -rl /mnt/voidlinux
+exit
+
+#cp -a /usr/share/xbps.d /mnt/voidlinux/usr/share/
+#cp /var/db/xbps/keys/*.plist /mnt/voidlinux/var/db/xbps/keys
+#xbps-install -r /mnt/voidlinux -SyU base-minimal
+
+xbps-reconfigure -r /mnt/voidlinux -f base-files
+chroot /mnt/voidlinux xbps-reconfigure -a
+#xbps-install -r /mnt/voidlinux -Sy xbps
+#xbps-install -r /mnt/voidlinux -Sy void-repo-nonfree
+#chroot /mnt/voidlinux xbps-install -Sy
+
+#xbps-install -r /mnt/voidlinux -Sy linux4.19 kernel-libc-headers
+#xbps-install -r /mnt/voidlinux -Sy kmod e2fsprogs dosfstools sudo
+#xbps-install -r /mnt/voidlinux -Sy iproute2 iputils dhclient iw
+#xbps-install -r /mnt/voidlinux -Sy ncurses kbd mdocml man-pages vim
+#xbps-install -r /mnt/voidlinux -Sy ${_PKGS}
+
+#echo "${_HOSTNAME}" > /mnt/voidlinux/etc/hostname
+#cat << EOF > /mnt/voidlinux/etc/rc.local
+#HOSTNAME="${_HOSTNAME}"
+#HARDWARECLOCK="${_CLOCK}"
+#TIMEZONE="${_TIMEZONE}"
+#KEYMAP="${_KEYMAP}"
+#EOF
+
+#cat << EOF > /mnt/voidlinux/etc/locale.conf
+#LANG=en_US.UTF-8
+#LC_COLLATE=C
+#LC_ALL=en_US.UTF-8
+#EOF
+
+#sed -e "/en_US.UTF-8 UTF-8/s/^\#//" -i /mnt/voidlinux/etc/default/libc-locales
+#chroot /mnt/voidlinux ln -s /usr/share/zoneinfo/"${_TIMEZONE}" /etc/localtime
+
+echo -e "${_PASS}\n${_PASS}" | chroot /mnt/voidlinux passwd root
+chroot /mnt/voidlinux useradd -N -p "$(openssl passwd -1 "{$_PASS}")" "${_USER}"
+chroot /mnt/voidlinux usermod -G wheel,audio,users "${_USER}"
+
+KVER=$(chroot /mnt/voidlinux xbps-query -RS linux4.19 -ppkgver | sed 's/linux4.19-//')
+chroot /mnt/voidlinux xbps-reconfigure -f linux4.19
+
+cat << EOF > /mnt/voidlinux/etc/fstab
+UUID=$(blkid -o value -s UUID "${_BOOT}") /boot ext2 defaults 0 2
+UUID=$(blkid -o value -s UUID "${_ROOT}") / ext4 defaults 0 1
+EOF
+
+#cat << EOF > /mnt/voidlinux/boot/extlinux/extlinux.conf
+#DEFAULT rootfs
+#
+#LABEL rootfs
+#    LINUX /boot/vmlinuz-${KVER}
+#    INITRD /boot/initramfs-${KVER}.img
+#    APPEND root=${_ROOT} rw
+#EOF
+
+#chroot /mnt/voidlinux xbps-install -Sy syslinux mkinitcpio mkinitcpio-udev
+#chroot /mnt/voidlinux mkinitcpio -g /boot/initramfs-"${KVER}".img -k "${KVER}"
+#chroot /mnt/voidlinux dd bs=440 conv=notrunc count=1 if=/usr/lib/syslinux/mbr.bin of=/dev/sda
+#chroot /mnt/voidlinux extlinux --install /boot/extlinux
+#chroot /mnt/voidlinux ln -snf . /boot/boot
+#chroot /mnt/voidlinux cp /usr/lib/syslinux/{libcom32.c32,libutil.c32} /boot/extlinux
+xbps-reconfigure -r /mnt/voidlinux -f glibc-locales syslinux mkinitcpio
+
+chroot /mnt/voidlinux ln -snf /usr/lib /lib64
+chroot /mnt/voidlinux ln -snf /usr/lib32 /lib32
+
+chroot /mnt/voidlinux ln -s /etc/sv/agetty-tty1 /etc/sv/agetty-tty2 \
+/etc/sv/dhclient /etc/sv/udevd /etc/sv/uuidd /etc/sv/dmeventd \
+/etc/runit/runsvdir/current/
