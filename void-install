@@ -1,37 +1,55 @@
 #!/usr/bin/env bash
 
-# void-install
-
+#  void-install
 #  Created: 2022/12/24
 #  Altered: 2022/12/25
 #
 #  Copyright (c) 2022-2022, Vilmar Catafesta <vcatafesta@gmail.com>
-#  Copyright (c) 2022-2022, Felipe Nogueira <fnogueira@gmail.com>
+#                2022-2022, Felipe Nogueira <fnogueira@gmail.com>
+#  All rights reserved.
 #
-#  This program is free software; you can redistribute it and/or modify
-#  it under the terms of the GNU General Public License as published by
-#  the Free Software Foundation; either version 2 of the License, or
-#  (at your option) any later version.
+#  Redistribution and use in source and binary forms, with or without
+#  modification, are permitted provided that the following conditions
+#  are met:
+#  1. Redistributions of source code must retain the above copyright
+#     notice, this list of conditions and the following disclaimer.
+#  2. Redistributions in binary form must reproduce the above copyright
+#     notice, this list of conditions and the following disclaimer in the
+#     documentation and/or other materials provided with the distribution.
 #
-#  This program is distributed in the hope that it will be useful,
-#  but WITHOUT ANY WARRANTY; without even the implied warranty of
-#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#  GNU General Public License for more details.
-#
-#  You should have received a copy of the GNU General Public License
-#  along with this program.  If not, see <http://www.gnu.org/licenses/>.
-#
+#  THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+#  IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+#  OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+#  IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+#  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+#  NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+#  DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+#  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+#  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+#  THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+#debug
+#export PS4=$'${red}${0##*/}${green}[$FUNCNAME]${pink}[$LINENO]${reset} '
+#set -x
+
+#system
+APP="${0##*/}"
+_VERSION_='1.0.20221225'
+readonly DEPENDENCIES=(tar wget sed cat chroot tput printf blkid fdisk mkfs.ext4 mkfs.ext2)
 
 sh_ambiente() {
-	export PS4=$'${red}${0##*/}${green}[$FUNCNAME]${pink}[$LINENO]${reset} '
-	#set -x
 	export LC_ALL=C
 	export LANG=C
-	readonly DEPENDENCIES=(tar wget sed cat chroot tput printf blkid)
-	tarball='http://void.chilinux.com/voidlinux/live/current/void-x86_64-ROOTFS-20221001.tar.xz'
-	dir_install='/mnt/voidlinux'
-	true=1
-	false=0
+	readonly dir_install='/mnt/voidlinux'
+	readonly app_conf='void-install.conf'
+	readonly BOOTLOG='/tmp/void-install.log'
+	readonly URL_GOOGLE='https://google.com'
+	readonly url_mirror='http://void.chililinux.com/voidlinux'
+	readonly grafico=0
+	readonly true=1
+	readonly false=0
+	: "${ccabec="$APP ${_VERSION_}"}"
+	: echo "$tarball"
 
 	if [ -z "${COLUMNS}" ]; then
    	COLUMNS=$(stty size)
@@ -41,19 +59,79 @@ sh_ambiente() {
    	COLUMNS=80
 	fi
 	COL=$((COLUMNS - 8))
-	#WCOL=$(( COL - 2 ))
 	SET_COL="\\033[${COL}G" # at the $COL char
-	#SET_WCOL="\\033[${WCOL}G"    # at the $WCOL char
-	#CURS_UP="\\033[1A\\033[0G"   # Up one line, at the 0'th char
 	CURS_ZERO="\\033[0G"
+}
+
+sh_touchconf(){
+   cat > "$app_conf" <<-'_EOF_'
+######################################################################
+# void-install.conf
+# Gerado por void-install
+######################################################################
+_CONFIG='1'
+_DEVICE='/dev/loop11'
+_PART_BIOS="/dev/loop11p1"
+_PART_BOOT="/dev/loop11p2"
+_PART_ROOT="/dev/loop11p3"
+_TARBALL_ROOTFS='void-x86_64-ROOTFS-20221001.tar.xz'
+_USER="void"
+_PASSWD_USER="void"
+_PASSWD_ROOT="root"
+_HOSTNAME="voidlinux"
+_TIMEZONE="America/Porto_Velho"
+_KEYMAP="br-abnt2"
+_CLOCK="UTC"
+_PKGS="vim"
+#end
+_EOF_
+}
+
+sh_config() {
+	[[ -s "$app_conf" ]] || sh_touchconf
+	# shellcheck source=/dev/null
+	if 	[[ -f "$app_conf" ]]
+	then 	source "$app_conf"
+	else  die "ERRO: falha na abertura de $app_conf!"
+	fi
 }
 
 sh_checkroot()
 {
 	if [ "$(id -u)" != "0" ]; then
-		printf "${red} error: You cannot perform this operation unless you are root!\n"
+		printf "%s\n" "${red} error: You cannot perform this operation unless you are root!"
 		exit 1
    fi
+}
+
+sh_checknet() {
+   xurl="$1"
+   # have internet?
+	msg "INFO" "$(log_info_msg "Testando internet em ${xurl}")"
+   curl --insecure "$xurl" >/dev/null 2>&1 ||
+      {
+         evaluate_retval "$?"
+         die "Sem rota para o servidor ($xurl) - Check sua conexão com a internet!"
+		   return 1
+      }
+   evaluate_retval "$?"
+   return $?
+}
+
+sh_checktarball() {
+	msg "INFO" "$(log_info_msg "Checando existência do tarball rootfs $_TARBALL_ROOTFS")"
+	if ! test -r "$_TARBALL_ROOTFS"; then
+	   evaluate_retval 1
+		msg "INFO" "$(log_info_msg "Tarball rootfs $_TARBALL_ROOTFS não localizado. Procedendoo com download")"
+		curl --insecure --silent --remote-name "$url_mirror/live/current/$_TARBALL_ROOTFS" >/dev/null 2>&1 ||
+      {
+         evaluate_retval "$?"
+         die "Sem rota para o servidor ($url_mirror) - Check sua conexão com a internet!"
+		   return 1
+      }
+	fi
+	evaluate_retval 0
+   return $?
 }
 
 checkDependencies()
@@ -75,9 +153,23 @@ checkDependencies()
 setvarcolors() {
    reset=$(tput sgr0);        green=$(tput setaf 2);  red=$(tput setaf 124);
    pink=$(tput setaf 129);    bold=$(tput bold);      blue=$(tput setaf 33);
-   yellow=$(tput setaf 136);  cyan=$(tput setaf 37);  orange=$(tput setaf 166);
-   white=$(tput setaf 15);    violet=$(tput setaf 61);
+	cyan=$(tput setaf 37);
+   #yellow=$(tput setaf 136);
+	#orange=$(tput setaf 166);
+   #white=$(tput setaf 15);
+   #violet=$(tput setaf 61);
 	#purple=$(tput setaf 125);
+}
+
+unsetvarcolors() {
+   reset='' green='' red='' pink='' bold='' blue='' cyan=''
+	#yellow=''
+	#orange=''
+	#white=''
+	#violet=''
+   #purple=''
+   NORMAL='' SUCCESS='' FAILURE='' BRACKET='' CURS_ZERO='' SUCCESS_PREFIX=''
+   SET_COL='' SUCCESS_SUFFIX=''
 }
 
 log_prefix() {
@@ -110,6 +202,7 @@ DOT() {
 }
 
 log_info_msg() {
+	last_msg="$@"
 	echo -n -e "${BMPREFIX}${@}"
 	return 0
 }
@@ -121,35 +214,43 @@ evaluate_retval() {
       error_value="$1"
    fi
 
-	if [ ${error_value} = 0 ]; then
-   	log_success_msg2
+	if [ "${error_value}" = 0 ]; then
+   	log_success_msg2 ''
 	else
-   	log_failure_msg2
+   	log_failure_msg2 ''
    fi
-   return ${error_value}
+   return "${error_value}"
 }
 
 log_failure_msg2() {
-   printf "${BMPREFIX}${@}"
-   printf "${CURS_ZERO}${FAILURE_PREFIX}${SET_COL}${FAILURE_SUFFIX}\n"
+   echo -n -e "${BMPREFIX}${@}"
+   echo    -e  "${CURS_ZERO}${FAILURE_PREFIX}${SET_COL}${FAILURE_SUFFIX}"
+	logmessage=$(sed 's/\\\033[^a-zA-Z]*.//g' <<< $last_msg)
+	echo -e "$(timespec) ${logmessage} OK" >> "${BOOTLOG}"
    return 0
 }
 
 log_success_msg()
 {
-    echo -n -e "${BMPREFIX}${@}"
-    echo -e "${CURS_ZERO}${SUCCESS_PREFIX}${SET_COL}${SUCCESS_SUFFIX}"
-    # Strip non-printable characters from log file
-    logmessage=`echo "${@}" | sed 's/\\\033[^a-zA-Z]*.//g'`
-    timespec
-    echo -e "${STAMP} ${logmessage} OK" >> ${BOOTLOG}
-    return 0
+	echo -n -e "${BMPREFIX}${@}"
+	echo    -e "${CURS_ZERO}${SUCCESS_PREFIX}${SET_COL}${SUCCESS_SUFFIX}"
+	logmessage=$(sed 's/\\\033[^a-zA-Z]*.//g' <<< $last_msg)
+	echo -e "$(timespec) ${logmessage} OK" >> "${BOOTLOG}"
+	return 0
 }
 
 log_success_msg2() {
-   printf "${BMPREFIX}${@}"
-   printf "${CURS_ZERO}${SUCCESS_PREFIX}${SET_COL}${SUCCESS_SUFFIX}\n"
+   echo -n -e "${BMPREFIX}${@}"
+   echo    -e  "${CURS_ZERO}${SUCCESS_PREFIX}${SET_COL}${SUCCESS_SUFFIX}"
+	logmessage=$(sed 's/\\\033[^a-zA-Z]*.//g' <<< $last_msg)
+	echo -e "$(timespec) ${logmessage} OK" >> "${BOOTLOG}"
    return 0
+}
+
+timespec() {
+	STAMP="$(echo `date +"%b %d %T %:z"` `hostname`) [$FUNCNAME][$LINENO]"
+	echo "$STAMP"
+	return 0
 }
 
 msg() {
@@ -166,38 +267,41 @@ msg() {
 }
 
 die() {
+	if test $# -ge 2; then
+		evaluate_retval 1
+	fi
    local msg=$1; shift
-	printf "%-75s\n" "$(DOT)${bold}${green}$msg${reset}" >&2
+	printf "%-75s\n" "$(DOT)${bold}${red}$msg${reset}" >&2
    exit 1
 }
 
 conf()
 {
-   read -p "$1 [Y/n]"
+   read -r -p "$1 [Y/n]"
    [[ ${REPLY^} == "" ]] && return $false
    [[ ${REPLY^} == N ]]  && return $true || return $false
 }
 
-unsetvarcolors() {
-   reset='' green='' red='' pink='' bold='' blue='' yellow='' cyan='' orange='' white='' violet=''
-   #purple=''
-   NORMAL='' SUCCESS='' WARNING='' FAILURE='' BRACKET='' CURS_ZERO='' SUCCESS_PREFIX=''
-   SET_COL='' SUCCESS_SUFFIX='' WAIT_PREFIX='' WAIT_SUFFIX='' WARNING_PREFIX='' WARNING_SUFFIX=''
-}
-
-sh_config() {
-	source minimal.cfg
-	if [[ $_CONFIG != 1 ]]; then
-		die "ERRO: minimal.cfg is not valid!"
-	fi
+sh_testdisk(){
+	local result=0
+	fdisk -l "$_DEVICE" > /dev/null 2>&1
+	result="$?"
+	evaluate_retval "$result"
+	return "$result"
 }
 
 sh_mkparted(){
-	replicate '=' $COLUMNS
-	fdisk -l $_DEVICE
-	replicate '=' $COLUMNS
+	msg "INFO" "$(log_info_msg "Testando disco ${_DEVICE} configurado em $app_conf")"
+	if ! sh_testdisk; then
+		die "Erro de leitura de disco: $_DEVICE. Check configuração em $app_conf"
+	fi
+	replicate "=" "$COLUMNS"
+	if ! fdisk -l "$_DEVICE"; then
+		die "Erro de leitura de disco: $_DEVICE. Check configuração em $app_conf"
+	fi
+	replicate "=" "$COLUMNS"
 	echo "${red}AVISO, CUIDADO, tudo será apagado!!${reset}"
-	replicate '=' $COLUMNS
+	replicate "=" "$COLUMNS"
 	if conf "Continuar com o particionamento em ${_DEVICE} ?" ; then
 		msg "INFO" "$(log_info_msg "Criando partições em ${_DEVICE}")"
 	   parted --script "$_DEVICE" --                                   		\
@@ -216,10 +320,10 @@ sh_mkparted(){
 sh_update_mirror() {
 	msg "INFO" "$(log_info_msg "Atualizando mirror em $dir_install")"
 	cat > "$dir_install/etc/xbps.d/00-reposytory-main.conf" <<-'_EOF_'
-repository=http://void.chililinux.com/voidlinux/current
-repository=http://void.chililinux.com/voidlinux/current/nonfree
-repository=http://void.chililinux.com/voidlinux/current/multilib
-repository=http://void.chililinux.com/voidlinux/current/multilib/nonfree
+repository="$url_mirror"/current
+repository="$url_mirror"/current/nonfree
+repository="$url_mirror"/current/multilib
+repository="$url_mirror"/current/multilib/nonfree
 _EOF_
 	evaluate_retval "$?"
 }
@@ -253,60 +357,64 @@ sh_update_hostname() {
 
 sh_update_timezone() {
 	msg "INFO" "$(log_info_msg "Ajustando timezone em $dir_install")"
-	sed -e "/en_US.UTF-8 UTF-8/s/^\#//" -i $dir_install/etc/default/libc-locales
-	ln -s $dir_install/usr/share/zoneinfo/"${_TIMEZONE}" $dir_install/etc/localtime
+	sed -e "/en_US.UTF-8 UTF-8/s/^\#//" -i "$dir_install/etc/default/libc-locales"
+	ln -s "$dir_install/usr/share/zoneinfo/${_TIMEZONE}" "$dir_install/etc/localtime"
 	evaluate_retval "$?"
 }
 
 sh_mkfs() {
-	msg "INFO" "$(log_info_msg "Formatando particao ${_BOOT}")"
-	mkfs.ext2 -F "${_BOOT}" > /dev/null 2>&1
+	msg "INFO" "$(log_info_msg "Formatando particao ${_PART_BOOT} FS ext2")"
+	mkfs.ext2 -F -L "EFI" "${_PART_BOOT}" > /dev/null 2>&1
 	evaluate_retval "$?"
-	msg "INFO" "$(log_info_msg "Formatando particao ${_ROOT}")"
-	mkfs.ext4 -F "${_ROOT}" > /dev/null 2>&1
+	msg "INFO" "$(log_info_msg "Formatando particao ${_PART_ROOT} FS ext4")"
+	mkfs.ext4 -F -L "VOID" "${_PART_ROOT}" > /dev/null 2>&1
 	evaluate_retval "$?"
 }
 
 sh_umountfs(){
 	msg "INFO" "$(log_info_msg "Desmontando sistema de arquivo em $dir_install")"
-	umount -frl $dir_install > /dev/null 2>&1
+	umount -frl "$dir_install" > /dev/null 2>&1
 	evaluate_retval "$?"
 }
 
 sh_bind() {
 	msg "INFO" "$(log_info_msg "Binding sistema de arquivo em $dir_install")"
-	mount -t proc /proc $dir_install/proc > /dev/null 2>&1
-	mount -t sysfs /sys $dir_install/sys > /dev/null 2>&1
-	mount -o bind /dev $dir_install/dev > /dev/null 2>&1
+	mount -t proc  /proc "$dir_install/proc" > /dev/null 2>&1
+	mount -t sysfs /sys  "$dir_install/sys"  > /dev/null 2>&1
+	mount -o bind  /dev  "$dir_install/dev"  > /dev/null 2>&1
 	evaluate_retval "$?"
 }
 
 sh_mkuser() {
-	msg "INFO" "$(log_info_msg "Criando usuario e ajustando passwd em $dir_install")"
-	echo -e "${_PASS}\n${_PASS}" | chroot $dir_install passwd root > /dev/null 2>&1
-	chroot $dir_install useradd -N -p "$(openssl passwd -1 "{$_PASS}")" "${_USER}" > /dev/null 2>&1
-	chroot $dir_install usermod -G wheel,audio,users "${_USER}" > /dev/null 2>&1
+	msg "INFO" "$(log_info_msg "Ajustando root passwd em $dir_install")"
+	echo -e "${_PASSWD_ROOT}\n${_PASSWD_ROOT}" | chroot $dir_install passwd root > /dev/null 2>&1
+	evaluate_retval "$?"
+#	chroot "$dir_install" useradd -N -p "$(openssl passwd -1 "{$_PASSWD_USER}")" "${_USER}" > /dev/null 2>&1
+#	chroot "$dir_install" usermod -G wheel,audio,users "${_USER}" > /dev/null 2>&1
+	msg "INFO" "$(log_info_msg "Criando usuario $_USER e ajustando passwd em $dir_install")"
+	chroot "$dir_install" /bin/bash -c "useradd -m ${_USER} -G audio,video,wheel,xbuilder -p ${_PASSWD_USER} > /dev/null 2>&1"
+	chroot "$dir_install" /bin/bash -c "(echo ${_USER}:${_PASSWD_USER}) | chpasswd -m > /dev/null 2>&1"
 	evaluate_retval "$?"
 }
 
 sh_mkfstab() {
 	msg "INFO" "$(log_info_msg "Criando fstab em $dir_install")"
-cat << EOF > $dir_install/etc/fstab
-UUID=$(blkid -o value -s UUID "${_BOOT}") /boot	ext2 defaults 0 2
-UUID=$(blkid -o value -s UUID "${_ROOT}") / 		ext4 defaults 0 1
+cat << EOF > "$dir_install/etc/fstab"
+UUID=$(blkid -o value -s UUID "${_PART_BOOT}") /boot	ext2 defaults 0 2
+UUID=$(blkid -o value -s UUID "${_PART_ROOT}") / 		ext4 defaults 0 1
 EOF
 	evaluate_retval "$?"
 }
 
 sh_mkservice() {
 	msg "INFO" "$(log_info_msg "Configurando services em $dir_install")"
-	chroot "$dir_install" /bin/bash -c "ln -s /etc/sv/agetty-tty1 /etc/runit/runsvdir/current/" > /dev/null 2>&1
-	chroot "$dir_install" /bin/bash -c "ln -s /etc/sv/agetty-tty2 /etc/runit/runsvdir/current/" > /dev/null 2>&1
-	chroot "$dir_install" /bin/bash -c "ln -s /etc/sv/dhcpcd /etc/runit/runsvdir/current/" > /dev/null 2>&1
-	chroot "$dir_install" /bin/bash -c "ln -s /etc/sv/wpa_supplicant /etc/runit/runsvdir/current/" > /dev/null 2>&1
-	chroot "$dir_install" /bin/bash -c "ln -s /etc/sv/udevd /etc/runit/runsvdir/current/" > /dev/null 2>&1
-	chroot "$dir_install" /bin/bash -c "ln -s /etc/sv/uuidd /etc/runit/runsvdir/current/" > /dev/null 2>&1
-	chroot "$dir_install" /bin/bash -c "ln -s /etc/sv/dmeventd /etc/runit/runsvdir/current/" > /dev/null 2>&1
+	chroot "$dir_install" /bin/bash -c "ln -s /etc/sv/agetty-tty1 /etc/runit/runsvdir/current/"		> /dev/null 2>&1
+	chroot "$dir_install" /bin/bash -c "ln -s /etc/sv/agetty-tty2 /etc/runit/runsvdir/current/"		> /dev/null 2>&1
+	chroot "$dir_install" /bin/bash -c "ln -s /etc/sv/dhcpcd /etc/runit/runsvdir/current/"				> /dev/null 2>&1
+	chroot "$dir_install" /bin/bash -c "ln -s /etc/sv/wpa_supplicant /etc/runit/runsvdir/current/" 	> /dev/null 2>&1
+	chroot "$dir_install" /bin/bash -c "ln -s /etc/sv/udevd /etc/runit/runsvdir/current/"          	> /dev/null 2>&1
+	chroot "$dir_install" /bin/bash -c "ln -s /etc/sv/uuidd /etc/runit/runsvdir/current/"				> /dev/null 2>&1
+	chroot "$dir_install" /bin/bash -c "ln -s /etc/sv/dmeventd /etc/runit/runsvdir/current/"			> /dev/null 2>&1
 	evaluate_retval "$?"
 }
 
@@ -320,6 +428,7 @@ sh_mkdir() {
 					"$dir_install/var/db/xbps/keys"
 					"$dir_install/etc/xbps.d"
 					)
+
 	msg "INFO" "$(log_info_msg "Criando diretorios em $dir_install")"
 	for cdir in "${adir[@]}"
 	do
@@ -330,10 +439,10 @@ sh_mkdir() {
 
 sh_mount() {
 	msg "INFO" "$(log_info_msg "Montando sistema de arquivos em $dir_install")"
-	mkdir -p $dir_install
-	mount "${_ROOT}" $dir_install
-	mkdir -p $dir_install/boot
-	mount "${_BOOT}" $dir_install/boot
+	mkdir -p "$dir_install"
+	mount "${_PART_ROOT}" "$dir_install"
+	mkdir -p "$dir_install/boot"
+	mount "${_PART_BOOT}" "$dir_install/boot"
 	evaluate_retval "$?"
 }
 
@@ -345,26 +454,37 @@ sh_install() {
 	sh_mkdir
 
 	msg "INFO" "$(log_info_msg "Instalando rootfs em $dir_install")"
-	if tar xpf "$_IMAGE" --xattrs-include='*.*' --numeric-owner -C $dir_install; then
+	if tar xpf "$_TARBALL_ROOTFS" --xattrs-include='*.*' --numeric-owner -C $dir_install > /dev/null 2>&1; then
 		evaluate_retval "$?"
 		sh_bind
 		msg "INFO" "$(log_info_msg "Ajustando /etc/resolv.conf em $dir_install")"
-		cp /etc/resolv.conf $dir_install/etc/
+		cp /etc/resolv.conf "$dir_install/etc/" > /dev/null 2>&1
 		evaluate_retval "$?"
 		sh_update_mirror
-		msg "INFO" "$(log_info_msg "Instalando pacotes em $dir_install")"
+		msg "INFO" "$(log_info_msg "Atualizando repositorio em $dir_install")"
 		chroot "$dir_install" /bin/bash -c "xbps-install -Suy xbps" > /dev/null 2>&1
+		evaluate_retval "$?"
+		msg "INFO" "$(log_info_msg "Atualizando sistema em $dir_install")"
 		chroot "$dir_install" /bin/bash -c "xbps-install -uy" > /dev/null 2>&1
-		chroot "$dir_install" /bin/bash -c "xbps-install -y base-system" > /dev/null 2>&1
-		chroot "$dir_install" /bin/bash -c "xbps-install -y tar xz base-minimal xbps kmod" > /dev/null 2>&1
+		evaluate_retval "$?"
+		msg "INFO" "$(log_info_msg "Instalando pacotes adicionais em $dir_install")"
+		chroot "$dir_install" /bin/bash -c "xbps-install -y base-system base-minimal tar xz kmod" > /dev/null 2>&1
 		chroot "$dir_install" /bin/bash -c "xbps-install -y e2fsprogs dosfstools lvm2 sudo iproute2 iputils" > /dev/null 2>&1
-		chroot "$dir_install" /bin/bash -c "xbps-install -y dhcpcd wpa_supplicant iw ncurses kbd mdocml" > /dev/null 2>&1
-		chroot "$dir_install" /bin/bash -c "xbps-install -y man-pages vim nano grub efivar efibootmgr" > /dev/null 2>&1
-		chroot "$dir_install" /bin/bash -c "xbps-install -y syslinux mkinitcpio mkinitcpio-udev" > /dev/null 2>&1
-		chroot "$dir_install" /bin/bash -c "xbps-install -y man-pages vim nano grub efivar efibootmgr" > /dev/null 2>&1
+		chroot "$dir_install" /bin/bash -c "xbps-install -y dhcpcd wpa_supplicant wireless_tools iw kbd mdocml" > /dev/null 2>&1
+		chroot "$dir_install" /bin/bash -c "xbps-install -y man-pages vim nano grub efivar efibootmgr os-prober" > /dev/null 2>&1
+		chroot "$dir_install" /bin/bash -c "xbps-install -y mkinitcpio mkinitcpio-udev" > /dev/null 2>&1
+		chroot "$dir_install" /bin/bash -c "xbps-install -y $_PKGS" > /dev/null 2>&1
+		evaluate_retval "$?"
+		msg "INFO" "$(log_info_msg "Instalando kernel em $dir_install")"
 		chroot "$dir_install" /bin/bash -c "xbps-install -y linux linux-headers" > /dev/null 2>&1
+		evaluate_retval "$?"
+		msg "INFO" "$(log_info_msg "Instalando grub no $_DEVICE")"
 		chroot "$dir_install" /bin/bash -c "grub-install $_DEVICE" > /dev/null 2>&1
+		evaluate_retval "$?"
+		msg "INFO" "$(log_info_msg "Gerando grub.cfg em $dir_install")"
 		chroot "$dir_install" /bin/bash -c "grub-mkconfig -o /boot/grub/grub.cfg" > /dev/null 2>&1
+		evaluate_retval "$?"
+		msg "INFO" "$(log_info_msg "Removendo pacote bootstrap em $dir_install")"
 		chroot "$dir_install" /bin/bash -c "xbps-remove -y base-voidstrap" > /dev/null 2>&1
 		evaluate_retval "$?"
 		sh_update_hostname
@@ -382,6 +502,7 @@ sh_install() {
 		sh_mkservice
 	else
 		evaluate_retval "$?"
+		die "Erro tar #$?. Problemas para descompactar o tarball $_TARBALL_ROOTFS em $dir_install"
 	fi
 	sh_umountfs
 }
@@ -396,4 +517,6 @@ evaluate_retval "$?"
 msg "INFO" "$(log_info_msg "Sanitizando ambiente")"
 sh_config
 evaluate_retval "$?"
+sh_checknet "$URL_GOOGLE" || return 1
+sh_checktarball
 sh_install
