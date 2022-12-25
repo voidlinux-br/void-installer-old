@@ -1,187 +1,383 @@
 #!/usr/bin/env bash
 
-dir_install='/mnt/voidlinux'
+sh_ambiente() {
+	export PS4=$'${red}${0##*/}${green}[$FUNCNAME]${pink}[$LINENO]${reset} '
+	#set -x
+	export LC_ALL=C
+	export LANG=C
+	readonly DEPENDENCIES=(tar wget sed cat chroot tput printf blkid)
+	tarball='http://void.chilinux.com/voidlinux/live/current/void-x86_64-ROOTFS-20221001.tar.xz'
+	dir_install='/mnt/voidlinux'
+	true=1
+	false=0
 
-sh_config() {
-	source minimal.cfg
-	if [[ $_CONFIG != 1 ]]; then
-		echo -e "\E[1m\E[31m=> \E[00mminimal.cfg is not valid!"
+	if [ -z "${COLUMNS}" ]; then
+   	COLUMNS=$(stty size)
+	   COLUMNS=${COLUMNS##* }
+	fi
+	if [ "${COLUMNS}" = "0" ]; then
+   	COLUMNS=80
+	fi
+	COL=$((COLUMNS - 8))
+	#WCOL=$(( COL - 2 ))
+	SET_COL="\\033[${COL}G" # at the $COL char
+	#SET_WCOL="\\033[${WCOL}G"    # at the $WCOL char
+	#CURS_UP="\\033[1A\\033[0G"   # Up one line, at the 0'th char
+	CURS_ZERO="\\033[0G"
+}
+
+sh_checkroot()
+{
+	if [ "$(id -u)" != "0" ]; then
+		printf "${red} error: You cannot perform this operation unless you are root!\n"
+		exit 1
+   fi
+}
+
+checkDependencies()
+{
+	local errorFound=0
+	declare -a missing
+
+	for d in "${DEPENDENCIES[@]}"; do
+		[[ -z $(command -v "$d") ]] && missing+=("$d") && errorFound=1 && printf '%s\n' "${red}ERRO${reset}: não encontrei o comando ${cyan}'$d'${reset}"
+	done
+	if (( errorFound )); then
+		echo "---IMPOSSÍVEL CONTINUAR---"
+		echo "Esse script precisa dos comandos listados acima" >&2
+		echo "Instale-os e/ou verifique se estão no seu \$PATH" >&2
 		exit 1
 	fi
-	cat minimal.cfg
+}
+
+setvarcolors() {
+   reset=$(tput sgr0);        green=$(tput setaf 2);  red=$(tput setaf 124);
+   pink=$(tput setaf 129);    bold=$(tput bold);      blue=$(tput setaf 33);
+   yellow=$(tput setaf 136);  cyan=$(tput setaf 37);  orange=$(tput setaf 166);
+   white=$(tput setaf 15);    violet=$(tput setaf 61);
+	#purple=$(tput setaf 125);
+}
+
+log_prefix() {
+   NORMAL="${reset}"   # Standard console grey
+   SUCCESS="${green}"  # Success is green
+   WARNING="${yellow}" # Warnings are yellow
+   FAILURE="${red}"    # Failures are red
+   BRACKET="${blue}" # Brackets are blue
+   BMPREFIX="     "
+   DOTPREFIX="  ${blue}::${reset} "
+   SUCCESS_PREFIX="${SUCCESS}  *  ${NORMAL}"
+   FAILURE_PREFIX="${FAILURE}*****${NORMAL}"
+   WARNING_PREFIX="${WARNING}  W  ${NORMAL}"
+   SUCCESS_SUFFIX="${BRACKET}[${SUCCESS}  OK  ${BRACKET}]${NORMAL}"
+   FAILURE_SUFFIX="${BRACKET}[${FAILURE} FAIL ${BRACKET}]${NORMAL}"
+   WARNING_SUFFIX="${BRACKET}[${WARNING} WARN ${BRACKET}]${NORMAL}"
+   WAIT_PREFIX="${WARNING}  R  ${NORMAL}"
+   WAIT_SUFFIX="${BRACKET}[${WARNING} WAIT ${BRACKET}]${NORMAL}"
+   FAILURE_PREFIX="${FAILURE}  X  ${NORMAL}"
+}
+
+replicate() {
+   local Var
+   printf -v Var %"$2s" " "  #  Coloca em $Var $1 espaços
+   echo "${Var// /$1}"       #  Troca os espaços pelo caractere escolhido
+}
+
+DOT() {
+	printf "%s" "${blue}:: ${reset}"
+}
+
+log_info_msg() {
+	echo -n -e "${BMPREFIX}${@}"
+	return 0
+}
+
+evaluate_retval() {
+   local error_value="$?"
+
+   if [ $# -gt 0 ]; then
+      error_value="$1"
+   fi
+
+	if [ ${error_value} = 0 ]; then
+   	log_success_msg2
+	else
+   	log_failure_msg2
+   fi
+   return ${error_value}
+}
+
+log_failure_msg2() {
+   printf "${BMPREFIX}${@}"
+   printf "${CURS_ZERO}${FAILURE_PREFIX}${SET_COL}${FAILURE_SUFFIX}\n"
+   return 0
+}
+
+log_success_msg()
+{
+    echo -n -e "${BMPREFIX}${@}"
+    echo -e "${CURS_ZERO}${SUCCESS_PREFIX}${SET_COL}${SUCCESS_SUFFIX}"
+    # Strip non-printable characters from log file
+    logmessage=`echo "${@}" | sed 's/\\\033[^a-zA-Z]*.//g'`
+    timespec
+    echo -e "${STAMP} ${logmessage} OK" >> ${BOOTLOG}
+    return 0
+}
+
+log_success_msg2() {
+   printf "${BMPREFIX}${@}"
+   printf "${CURS_ZERO}${SUCCESS_PREFIX}${SET_COL}${SUCCESS_SUFFIX}\n"
+   return 0
+}
+
+msg() {
+   if (( grafico )); then
+      ${DIALOG}               \
+      --no-collapse           \
+      --title     "$1"        \
+      --backtitle "$ccabec"   \
+      --infobox   "\n$2"      \
+      10 60
+   else
+      log_info_msg "$2"
+   fi
+}
+
+die() {
+   local msg=$1; shift
+	printf "%-75s\n" "$(DOT)${bold}${green}$msg${reset}" >&2
+   exit 1
 }
 
 conf()
 {
-	read -p "$1 [Y/n]"
-	[[ ${REPLY^} == "" ]] && return 0
-	[[ ${REPLY^} == N ]]  && return 1 || return 0
+   read -p "$1 [Y/n]"
+   [[ ${REPLY^} == "" ]] && return $false
+   [[ ${REPLY^} == N ]]  && return $true || return $false
+}
+
+unsetvarcolors() {
+   reset='' green='' red='' pink='' bold='' blue='' yellow='' cyan='' orange='' white='' violet=''
+   #purple=''
+   NORMAL='' SUCCESS='' WARNING='' FAILURE='' BRACKET='' CURS_ZERO='' SUCCESS_PREFIX=''
+   SET_COL='' SUCCESS_SUFFIX='' WAIT_PREFIX='' WAIT_SUFFIX='' WARNING_PREFIX='' WARNING_SUFFIX=''
+}
+
+sh_config() {
+	source minimal.cfg
+	if [[ $_CONFIG != 1 ]]; then
+		die "ERRO: minimal.cfg is not valid!"
+	fi
 }
 
 sh_mkparted(){
+	replicate '=' $COLUMNS
 	fdisk -l $_DEVICE
-	echo
-	echo "AVISO, CUIDADO, tudo será apagado!!"
-	if conf "Continuar com o particionamento?" ; then
-	   parted --script "$_DEVICE" --                                        \
+	replicate '=' $COLUMNS
+	echo "${red}AVISO, CUIDADO, tudo será apagado!!${reset}"
+	replicate '=' $COLUMNS
+	if conf "Continuar com o particionamento em ${_DEVICE} ?" ; then
+		msg "INFO" "$(log_info_msg "Criando partições em ${_DEVICE}")"
+	   parted --script "$_DEVICE" --                                   		\
 	      mklabel gpt                                                       \
 	      mkpart primary fat32      1MiB 3MiB   set 1 bios on name 1 BIOS   \
 	      mkpart primary fat32      3MiB 128MiB set 2 esp  on name 2 EFI    \
 	      mkpart primary ext4       128MiB 100%               name 3 ROOT   \
 	      align-check optimal 1
-	      parted --script "$_DEVICE" -- print
+		evaluate_retval
+		#parted --script "$_DEVICE" -- print
+	else
+		die "Finalizando..."
 	fi
 }
 
-sh_update_mirror(){
+sh_update_mirror() {
+	msg "INFO" "$(log_info_msg "Atualizando mirror em $dir_install")"
 	cat > "$dir_install/etc/xbps.d/00-reposytory-main.conf" <<-'_EOF_'
 repository=http://void.chililinux.com/voidlinux/current
-#repository=http://void.chililinux.com/voidlinux/extras
 repository=http://void.chililinux.com/voidlinux/current/nonfree
 repository=http://void.chililinux.com/voidlinux/current/multilib
 repository=http://void.chililinux.com/voidlinux/current/multilib/nonfree
 _EOF_
+	evaluate_retval
 }
 
 sh_update_rc() {
+	msg "INFO" "$(log_info_msg "Ajustando rc.local em $dir_install")"
 	cat > "$dir_install/etc/rc.local" <<-'_EOF_'
 HOSTNAME="${_HOSTNAME}"
 HARDWARECLOCK="${_CLOCK}"
 TIMEZONE="${_TIMEZONE}"
 KEYMAP="${_KEYMAP}"
 _EOF_
+evaluate_retval
 }
 
 sh_update_locale() {
+	msg "INFO" "$(log_info_msg "Ajustando locale.conf em $dir_install")"
 	cat > "$dir_install/etc/locale.conf" <<-'_EOF_'
 LANG=en_US.UTF-8
 LC_COLLATE=C
 LC_ALL=en_US.UTF-8
 _EOF_
+evaluate_retval
 }
 
 sh_update_hostname() {
+	msg "INFO" "$(log_info_msg "Ajustando hostname em $dir_install")"
 	echo "${_HOSTNAME}" > $dir_install/etc/hostname
+	evaluate_retval
 }
 
-sh_update_timezone(){
+sh_update_timezone() {
+	msg "INFO" "$(log_info_msg "Ajustando timezone em $dir_install")"
 	sed -e "/en_US.UTF-8 UTF-8/s/^\#//" -i $dir_install/etc/default/libc-locales
 	ln -s $dir_install/usr/share/zoneinfo/"${_TIMEZONE}" $dir_install/etc/localtime
+	evaluate_retval
 }
 
-sh_config
-sh_mkparted
-umount -rl /mnt/voidlinux
-mkfs.ext2 -F "${_BOOT}"
-mkfs.ext4 -F "${_ROOT}"
+sh_mkfs() {
+	msg "INFO" "$(log_info_msg "Formatando particao ${_BOOT}")"
+	mkfs.ext2 -F "${_BOOT}" > /dev/null 2>&1
+	evaluate_retval
+	msg "INFO" "$(log_info_msg "Formatando particao ${_ROOT}")"
+	mkfs.ext4 -F "${_ROOT}" > /dev/null 2>&1
+	evaluate_retval
+}
 
-mkdir -p '/mnt/voidlinux'
-adir=("$dir_install/boot"
-		"$dir_install/dev"
-		"$dir_install/proc"
-		"$dir_install/sys"
-		"$dir_install/var/db/xbps/keys"
-		"$dir_install/etc/xbps.d"
-	)
+sh_umountfs(){
+	msg "INFO" "$(log_info_msg "Desmontando sistema de arquivo em $dir_install")"
+	umount -frl $dir_install > /dev/null 2>&1
+	evaluate_retval
+}
 
-mount -t ext4 "${_ROOT}" /mnt/voidlinux
-for dir in "${adir[@]}"
-do
-	echo $dir
-	[[ -d "$dir" ]] || mkdir -p "$dir"
-done
-mount -t ext2 "${_BOOT}" $dir_install/boot
-mount -t proc /proc $dir_install/proc
-mount -t sysfs /sys $dir_install/sys
-mount -o bind /dev $dir_install/dev
+sh_bind() {
+	msg "INFO" "$(log_info_msg "Binding sistema de arquivo em $dir_install")"
+	mount -t proc /proc $dir_install/proc
+	mount -t sysfs /sys $dir_install/sys
+	mount -o bind /dev $dir_install/dev
+	evaluate_retval
+}
 
-#xbps-install -Sy tar xz
-tar xpf "$_IMAGE" --xattrs-include='*.*' --numeric-owner -C $dir_install
-cp -L /etc/resolv.conf $dir_install/etc/
-sh_update_mirror
-#chroot /mnt/voidlinu
-chroot "$dir_install" /bin/bash -c "xbps-install -Syu"
-chroot "$dir_install" /bin/bash -c "xbps-install -y base-minimal xbps kmod"
-chroot "$dir_install" /bin/bash -c "xbps-install -y e2fsprogs dosfstools sudo iproute2 iputils"
-chroot "$dir_install" /bin/bash -c "xbps-install -y dhcpcd wpa_supplicant iw ncurses kbd mdocml"
-chroot "$dir_install" /bin/bash -c "xbps-install -y man-pages vim nano grub efivar efibootmgr"
-chroot "$dir_install" /bin/bash -c "xbps-install -y syslinux mkinitcpio mkinitcpio-udev"
-chroot "$dir_install" /bin/bash -c "xbps-install -y man-pages vim nano grub efivar efibootmgr"
-chroot "$dir_install" /bin/bash -c "xbps-install -y linux linux-headers"
-chroot "$dir_install" /bin/bash -c "grub-install $_DEVICE"
-chroot "$dir_install" /bin/bash -c "grub-mkconfig -o /boot/grub/grub.cfg"
-sh_update_hostname
-sh_update_rc
-sh_update_locale
-sh_update_timezone
-umount -rl /mnt/voidlinux
-exit
+sh_bind_old() {
+	mount --rbind /sys $dir_install/sys   && mount --make-rslave $dir_install/sys
+	mount --rbind /dev $dir_install/dev   && mount --make-rslave $dir_install/dev
+	mount --rbind /proc $dir_install/proc && mount --make-rslave $dir_install/proc
+}
 
-#cp -a /usr/share/xbps.d /mnt/voidlinux/usr/share/
-#cp /var/db/xbps/keys/*.plist /mnt/voidlinux/var/db/xbps/keys
-#xbps-install -r /mnt/voidlinux -SyU base-minimal
+sh_mkuser() {
+	msg "INFO" "$(log_info_msg "Criando usuario e ajustando passwd em $dir_install")"
+	echo -e "${_PASS}\n${_PASS}" | chroot $dir_install passwd root
+	chroot $dir_install useradd -N -p "$(openssl passwd -1 "{$_PASS}")" "${_USER}"
+	chroot $dir_install usermod -G wheel,audio,users "${_USER}"
+	evaluate_retval
+}
 
-xbps-reconfigure -r /mnt/voidlinux -f base-files
-chroot /mnt/voidlinux xbps-reconfigure -a
-#xbps-install -r /mnt/voidlinux -Sy xbps
-#xbps-install -r /mnt/voidlinux -Sy void-repo-nonfree
-#chroot /mnt/voidlinux xbps-install -Sy
-
-#xbps-install -r /mnt/voidlinux -Sy linux4.19 kernel-libc-headers
-#xbps-install -r /mnt/voidlinux -Sy kmod e2fsprogs dosfstools sudo
-#xbps-install -r /mnt/voidlinux -Sy iproute2 iputils dhclient iw
-#xbps-install -r /mnt/voidlinux -Sy ncurses kbd mdocml man-pages vim
-#xbps-install -r /mnt/voidlinux -Sy ${_PKGS}
-
-#echo "${_HOSTNAME}" > /mnt/voidlinux/etc/hostname
-#cat << EOF > /mnt/voidlinux/etc/rc.local
-#HOSTNAME="${_HOSTNAME}"
-#HARDWARECLOCK="${_CLOCK}"
-#TIMEZONE="${_TIMEZONE}"
-#KEYMAP="${_KEYMAP}"
-#EOF
-
-#cat << EOF > /mnt/voidlinux/etc/locale.conf
-#LANG=en_US.UTF-8
-#LC_COLLATE=C
-#LC_ALL=en_US.UTF-8
-#EOF
-
-#sed -e "/en_US.UTF-8 UTF-8/s/^\#//" -i /mnt/voidlinux/etc/default/libc-locales
-#chroot /mnt/voidlinux ln -s /usr/share/zoneinfo/"${_TIMEZONE}" /etc/localtime
-
-echo -e "${_PASS}\n${_PASS}" | chroot /mnt/voidlinux passwd root
-chroot /mnt/voidlinux useradd -N -p "$(openssl passwd -1 "{$_PASS}")" "${_USER}"
-chroot /mnt/voidlinux usermod -G wheel,audio,users "${_USER}"
-
-KVER=$(chroot /mnt/voidlinux xbps-query -RS linux4.19 -ppkgver | sed 's/linux4.19-//')
-chroot /mnt/voidlinux xbps-reconfigure -f linux4.19
-
-cat << EOF > /mnt/voidlinux/etc/fstab
+sh_mkfstab() {
+	msg "INFO" "$(log_info_msg "Criando fstab em $dir_install")"
+	cat > "$dir_install/etc/fstab" <<-'_EOF_'
 UUID=$(blkid -o value -s UUID "${_BOOT}") /boot ext2 defaults 0 2
-UUID=$(blkid -o value -s UUID "${_ROOT}") / ext4 defaults 0 1
-EOF
+UUID=$(blkid -o value -s UUID "${_ROOT}") / 		ext4 defaults 0 1
+_EOF_
+evaluate_retval
+}
 
-#cat << EOF > /mnt/voidlinux/boot/extlinux/extlinux.conf
-#DEFAULT rootfs
-#
-#LABEL rootfs
-#    LINUX /boot/vmlinuz-${KVER}
-#    INITRD /boot/initramfs-${KVER}.img
-#    APPEND root=${_ROOT} rw
-#EOF
+sh_mkservice() {
+	msg "INFO" "$(log_info_msg "Configurando services em $dir_install")"
+	chroot "$dir_install" /bin/bash -c "ln -s /etc/sv/agetty-tty1 /var/service/" > /dev/null 2>&1
+	chroot "$dir_install" /bin/bash -c "ln -s /etc/sv/agetty-tty2 /var/service/" > /dev/null 2>&1
+	chroot "$dir_install" /bin/bash -c "ln -s /etc/sv/dhcpcd /var/service/" > /dev/null 2>&1
+	chroot "$dir_install" /bin/bash -c "ln -s /etc/sv/wpa_supplicant /var/service/" > /dev/null 2>&1
+	chroot "$dir_install" /bin/bash -c "ln -s /etc/sv/udevd /var/service/" > /dev/null 2>&1
+	chroot "$dir_install" /bin/bash -c "ln -s /etc/sv/uuidd /var/service/" > /dev/null 2>&1
+	chroot "$dir_install" /bin/bash -c "ln -s /etc/sv/dmeventd /var/service/" > /dev/null 2>&1
+	chroot "$dir_install" /bin/bash -c "ln -s /etc/runit/runsvdir/current/" > /dev/null 2>&1
+	evaluate_retval
+}
 
-#chroot /mnt/voidlinux xbps-install -Sy syslinux mkinitcpio mkinitcpio-udev
-#chroot /mnt/voidlinux mkinitcpio -g /boot/initramfs-"${KVER}".img -k "${KVER}"
-#chroot /mnt/voidlinux dd bs=440 conv=notrunc count=1 if=/usr/lib/syslinux/mbr.bin of=/dev/sda
-#chroot /mnt/voidlinux extlinux --install /boot/extlinux
-#chroot /mnt/voidlinux ln -snf . /boot/boot
-#chroot /mnt/voidlinux cp /usr/lib/syslinux/{libcom32.c32,libutil.c32} /boot/extlinux
-xbps-reconfigure -r /mnt/voidlinux -f glibc-locales syslinux mkinitcpio
+sh_mkdir() {
+	local cdir
+	local adir=("$dir_install/boot"
+					"$dir_install/boot/efi"
+					"$dir_install/dev"
+					"$dir_install/proc"
+					"$dir_install/sys"
+					"$dir_install/var/db/xbps/keys"
+					"$dir_install/etc/xbps.d"
+					)
+	msg "INFO" "$(log_info_msg "Criando diretorios em $dir_install")"
+	for cdir in "${adir[@]}"
+	do
+		[[ -d "$cdir" ]] || mkdir -p "$cdir"
+	done
+	evaluate_retval
+}
 
-chroot /mnt/voidlinux ln -snf /usr/lib /lib64
-chroot /mnt/voidlinux ln -snf /usr/lib32 /lib32
+sh_mount() {
+	msg "INFO" "$(log_info_msg "Montando sistema de arquivos em $dir_install")"
+	mkdir -p $dir_install
+	mount "${_ROOT}" $dir_install
+	mkdir -p $dir_install/boot
+	mount "${_BOOT}" $dir_install/boot
+	evaluate_retval
+}
 
-chroot /mnt/voidlinux ln -s /etc/sv/agetty-tty1 /etc/sv/agetty-tty2 \
-/etc/sv/dhclient /etc/sv/udevd /etc/sv/uuidd /etc/sv/dmeventd \
-/etc/runit/runsvdir/current/
+sh_install() {
+	sh_umountfs
+	if ! sh_mkparted; then die "Erro"; fi
+	if ! sh_mkfs 	 ; then die "Erro"; fi
+	sh_mount
+	sh_mkdir
+
+	msg "INFO" "$(log_info_msg "Instalando rootfs em $dir_install")"
+	if tar xpf "$_IMAGE" --xattrs-include='*.*' --numeric-owner -C $dir_install; then
+		evaluate_retval
+		sh_bind
+		msg "INFO" "$(log_info_msg "Ajustando /etc/resolv.conf em $dir_install")"
+		cp /etc/resolv.conf $dir_install/etc/
+		evaluate_retval
+		sh_update_mirror
+		msg "INFO" "$(log_info_msg "Instalando pacotes em $dir_install")"
+		chroot "$dir_install" /bin/bash -c "xbps-install -Suy xbps" > /dev/null 2>&1
+		chroot "$dir_install" /bin/bash -c "xbps-install -uy" > /dev/null 2>&1
+		chroot "$dir_install" /bin/bash -c "xbps-install -y base-system" > /dev/null 2>&1
+		chroot "$dir_install" /bin/bash -c "xbps-install -y tar xz base-minimal xbps kmod" > /dev/null 2>&1
+		chroot "$dir_install" /bin/bash -c "xbps-install -y e2fsprogs dosfstools lvm2 sudo iproute2 iputils" > /dev/null 2>&1
+		chroot "$dir_install" /bin/bash -c "xbps-install -y dhcpcd wpa_supplicant iw ncurses kbd mdocml" > /dev/null 2>&1
+		chroot "$dir_install" /bin/bash -c "xbps-install -y man-pages vim nano grub efivar efibootmgr" > /dev/null 2>&1
+		chroot "$dir_install" /bin/bash -c "xbps-install -y syslinux mkinitcpio mkinitcpio-udev" > /dev/null 2>&1
+		chroot "$dir_install" /bin/bash -c "xbps-install -y man-pages vim nano grub efivar efibootmgr" > /dev/null 2>&1
+		chroot "$dir_install" /bin/bash -c "xbps-install -y linux linux-headers" > /dev/null 2>&1
+		chroot "$dir_install" /bin/bash -c "grub-install $_DEVICE" > /dev/null 2>&1
+		chroot "$dir_install" /bin/bash -c "grub-mkconfig -o /boot/grub/grub.cfg" > /dev/null 2>&1
+		chroot "$dir_install" /bin/bash -c "xbps-remove -y base-voidstrap" > /dev/null 2>&1
+		evaluate_retval
+		sh_update_hostname
+		sh_update_rc
+		sh_update_timezone
+		msg "INFO" "$(log_info_msg "Reconfigurando locales em $dir_install")"
+		chroot "$dir_install" /bin/bash -c "xbps-reconfigure -f glibc-locales" > /dev/null 2>&1
+		evaluate_retval
+		sh_update_locale
+		sh_mkuser
+		sh_mkfstab
+		sh_mkservice
+		msg "INFO" "$(log_info_msg "Certificando que toos os pacotes estejam configurados corretamente em $dir_install")"
+		chroot "$dir_install" /bin/bash -c "xbps-reconfigure -fa" > /dev/null 2>&1
+		evaluate_retval
+	fi
+	evaluate_retval
+	sh_umountfs
+}
+
+sh_ambiente
+setvarcolors
+log_prefix
+msg "INFO" "$(log_info_msg "Configurando ambiente")"
+sh_checkroot
+checkDependencies
+evaluate_retval
+msg "INFO" "$(log_info_msg "Sanitizando ambiente")"
+sh_config
+evaluate_retval
+sh_install
