@@ -1,5 +1,27 @@
 #!/usr/bin/env bash
 
+# void-install
+
+#  Created: 2022/12/24
+#  Altered: 2022/12/25
+#
+#  Copyright (c) 2022-2022, Vilmar Catafesta <vcatafesta@gmail.com>
+#  Copyright (c) 2022-2022, Felipe Nogueira <fnogueira@gmail.com>
+#
+#  This program is free software; you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation; either version 2 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
 sh_ambiente() {
 	export PS4=$'${red}${0##*/}${green}[$FUNCNAME]${pink}[$LINENO]${reset} '
 	#set -x
@@ -184,7 +206,7 @@ sh_mkparted(){
 	      mkpart primary fat32      3MiB 128MiB set 2 esp  on name 2 EFI    \
 	      mkpart primary ext4       128MiB 100%               name 3 ROOT   \
 	      align-check optimal 1
-		evaluate_retval
+		evaluate_retval "$?"
 		#parted --script "$_DEVICE" -- print
 	else
 		die "Finalizando..."
@@ -199,7 +221,7 @@ repository=http://void.chililinux.com/voidlinux/current/nonfree
 repository=http://void.chililinux.com/voidlinux/current/multilib
 repository=http://void.chililinux.com/voidlinux/current/multilib/nonfree
 _EOF_
-	evaluate_retval
+	evaluate_retval "$?"
 }
 
 sh_update_rc() {
@@ -210,7 +232,7 @@ HARDWARECLOCK="${_CLOCK}"
 TIMEZONE="${_TIMEZONE}"
 KEYMAP="${_KEYMAP}"
 _EOF_
-evaluate_retval
+	evaluate_retval "$?"
 }
 
 sh_update_locale() {
@@ -220,79 +242,72 @@ LANG=en_US.UTF-8
 LC_COLLATE=C
 LC_ALL=en_US.UTF-8
 _EOF_
-evaluate_retval
+	evaluate_retval "$?"
 }
 
 sh_update_hostname() {
 	msg "INFO" "$(log_info_msg "Ajustando hostname em $dir_install")"
 	echo "${_HOSTNAME}" > $dir_install/etc/hostname
-	evaluate_retval
+	evaluate_retval "$?"
 }
 
 sh_update_timezone() {
 	msg "INFO" "$(log_info_msg "Ajustando timezone em $dir_install")"
 	sed -e "/en_US.UTF-8 UTF-8/s/^\#//" -i $dir_install/etc/default/libc-locales
 	ln -s $dir_install/usr/share/zoneinfo/"${_TIMEZONE}" $dir_install/etc/localtime
-	evaluate_retval
+	evaluate_retval "$?"
 }
 
 sh_mkfs() {
 	msg "INFO" "$(log_info_msg "Formatando particao ${_BOOT}")"
 	mkfs.ext2 -F "${_BOOT}" > /dev/null 2>&1
-	evaluate_retval
+	evaluate_retval "$?"
 	msg "INFO" "$(log_info_msg "Formatando particao ${_ROOT}")"
 	mkfs.ext4 -F "${_ROOT}" > /dev/null 2>&1
-	evaluate_retval
+	evaluate_retval "$?"
 }
 
 sh_umountfs(){
 	msg "INFO" "$(log_info_msg "Desmontando sistema de arquivo em $dir_install")"
 	umount -frl $dir_install > /dev/null 2>&1
-	evaluate_retval
+	evaluate_retval "$?"
 }
 
 sh_bind() {
 	msg "INFO" "$(log_info_msg "Binding sistema de arquivo em $dir_install")"
-	mount -t proc /proc $dir_install/proc
-	mount -t sysfs /sys $dir_install/sys
-	mount -o bind /dev $dir_install/dev
-	evaluate_retval
-}
-
-sh_bind_old() {
-	mount --rbind /sys $dir_install/sys   && mount --make-rslave $dir_install/sys
-	mount --rbind /dev $dir_install/dev   && mount --make-rslave $dir_install/dev
-	mount --rbind /proc $dir_install/proc && mount --make-rslave $dir_install/proc
+	mount -t proc /proc $dir_install/proc > /dev/null 2>&1
+	mount -t sysfs /sys $dir_install/sys > /dev/null 2>&1
+	mount -o bind /dev $dir_install/dev > /dev/null 2>&1
+	evaluate_retval "$?"
 }
 
 sh_mkuser() {
 	msg "INFO" "$(log_info_msg "Criando usuario e ajustando passwd em $dir_install")"
-	echo -e "${_PASS}\n${_PASS}" | chroot $dir_install passwd root
-	chroot $dir_install useradd -N -p "$(openssl passwd -1 "{$_PASS}")" "${_USER}"
-	chroot $dir_install usermod -G wheel,audio,users "${_USER}"
-	evaluate_retval
+	echo -e "${_PASS}\n${_PASS}" | chroot $dir_install passwd root > /dev/null 2>&1
+	chroot $dir_install useradd -N -p "$(openssl passwd -1 "{$_PASS}")" "${_USER}" > /dev/null 2>&1
+	chroot $dir_install usermod -G wheel,audio,users "${_USER}" > /dev/null 2>&1
+	evaluate_retval "$?"
 }
 
 sh_mkfstab() {
 	msg "INFO" "$(log_info_msg "Criando fstab em $dir_install")"
-	cat > "$dir_install/etc/fstab" <<-'_EOF_'
-UUID=$(blkid -o value -s UUID "${_BOOT}") /boot ext2 defaults 0 2
+cat << EOF > $dir_install/etc/fstab
+UUID=$(blkid -o value -s UUID "${_BOOT}") /boot	ext2 defaults 0 2
 UUID=$(blkid -o value -s UUID "${_ROOT}") / 		ext4 defaults 0 1
-_EOF_
-evaluate_retval
+EOF
+	evaluate_retval "$?"
 }
 
 sh_mkservice() {
 	msg "INFO" "$(log_info_msg "Configurando services em $dir_install")"
-	chroot "$dir_install" /bin/bash -c "ln -s /etc/sv/agetty-tty1 /var/service/" > /dev/null 2>&1
-	chroot "$dir_install" /bin/bash -c "ln -s /etc/sv/agetty-tty2 /var/service/" > /dev/null 2>&1
-	chroot "$dir_install" /bin/bash -c "ln -s /etc/sv/dhcpcd /var/service/" > /dev/null 2>&1
-	chroot "$dir_install" /bin/bash -c "ln -s /etc/sv/wpa_supplicant /var/service/" > /dev/null 2>&1
-	chroot "$dir_install" /bin/bash -c "ln -s /etc/sv/udevd /var/service/" > /dev/null 2>&1
-	chroot "$dir_install" /bin/bash -c "ln -s /etc/sv/uuidd /var/service/" > /dev/null 2>&1
-	chroot "$dir_install" /bin/bash -c "ln -s /etc/sv/dmeventd /var/service/" > /dev/null 2>&1
-	chroot "$dir_install" /bin/bash -c "ln -s /etc/runit/runsvdir/current/" > /dev/null 2>&1
-	evaluate_retval
+	chroot "$dir_install" /bin/bash -c "ln -s /etc/sv/agetty-tty1 /etc/runit/runsvdir/current/" > /dev/null 2>&1
+	chroot "$dir_install" /bin/bash -c "ln -s /etc/sv/agetty-tty2 /etc/runit/runsvdir/current/" > /dev/null 2>&1
+	chroot "$dir_install" /bin/bash -c "ln -s /etc/sv/dhcpcd /etc/runit/runsvdir/current/" > /dev/null 2>&1
+	chroot "$dir_install" /bin/bash -c "ln -s /etc/sv/wpa_supplicant /etc/runit/runsvdir/current/" > /dev/null 2>&1
+	chroot "$dir_install" /bin/bash -c "ln -s /etc/sv/udevd /etc/runit/runsvdir/current/" > /dev/null 2>&1
+	chroot "$dir_install" /bin/bash -c "ln -s /etc/sv/uuidd /etc/runit/runsvdir/current/" > /dev/null 2>&1
+	chroot "$dir_install" /bin/bash -c "ln -s /etc/sv/dmeventd /etc/runit/runsvdir/current/" > /dev/null 2>&1
+	evaluate_retval "$?"
 }
 
 sh_mkdir() {
@@ -310,7 +325,7 @@ sh_mkdir() {
 	do
 		[[ -d "$cdir" ]] || mkdir -p "$cdir"
 	done
-	evaluate_retval
+	evaluate_retval "$?"
 }
 
 sh_mount() {
@@ -319,7 +334,7 @@ sh_mount() {
 	mount "${_ROOT}" $dir_install
 	mkdir -p $dir_install/boot
 	mount "${_BOOT}" $dir_install/boot
-	evaluate_retval
+	evaluate_retval "$?"
 }
 
 sh_install() {
@@ -331,11 +346,11 @@ sh_install() {
 
 	msg "INFO" "$(log_info_msg "Instalando rootfs em $dir_install")"
 	if tar xpf "$_IMAGE" --xattrs-include='*.*' --numeric-owner -C $dir_install; then
-		evaluate_retval
+		evaluate_retval "$?"
 		sh_bind
 		msg "INFO" "$(log_info_msg "Ajustando /etc/resolv.conf em $dir_install")"
 		cp /etc/resolv.conf $dir_install/etc/
-		evaluate_retval
+		evaluate_retval "$?"
 		sh_update_mirror
 		msg "INFO" "$(log_info_msg "Instalando pacotes em $dir_install")"
 		chroot "$dir_install" /bin/bash -c "xbps-install -Suy xbps" > /dev/null 2>&1
@@ -351,22 +366,23 @@ sh_install() {
 		chroot "$dir_install" /bin/bash -c "grub-install $_DEVICE" > /dev/null 2>&1
 		chroot "$dir_install" /bin/bash -c "grub-mkconfig -o /boot/grub/grub.cfg" > /dev/null 2>&1
 		chroot "$dir_install" /bin/bash -c "xbps-remove -y base-voidstrap" > /dev/null 2>&1
-		evaluate_retval
+		evaluate_retval "$?"
 		sh_update_hostname
 		sh_update_rc
 		sh_update_timezone
 		msg "INFO" "$(log_info_msg "Reconfigurando locales em $dir_install")"
 		chroot "$dir_install" /bin/bash -c "xbps-reconfigure -f glibc-locales" > /dev/null 2>&1
-		evaluate_retval
+		evaluate_retval "$?"
 		sh_update_locale
 		sh_mkuser
 		sh_mkfstab
-		sh_mkservice
-		msg "INFO" "$(log_info_msg "Certificando que toos os pacotes estejam configurados corretamente em $dir_install")"
+		msg "INFO" "$(log_info_msg "Certificando que todos pacotes estejam configurados corretamente em $dir_install")"
 		chroot "$dir_install" /bin/bash -c "xbps-reconfigure -fa" > /dev/null 2>&1
-		evaluate_retval
+		evaluate_retval "$?"
+		sh_mkservice
+	else
+		evaluate_retval "$?"
 	fi
-	evaluate_retval
 	sh_umountfs
 }
 
@@ -376,8 +392,8 @@ log_prefix
 msg "INFO" "$(log_info_msg "Configurando ambiente")"
 sh_checkroot
 checkDependencies
-evaluate_retval
+evaluate_retval "$?"
 msg "INFO" "$(log_info_msg "Sanitizando ambiente")"
 sh_config
-evaluate_retval
+evaluate_retval "$?"
 sh_install
