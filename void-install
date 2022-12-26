@@ -726,10 +726,17 @@ sh_choosedisk() {
             done
 			}
 			DEVICE_ORIGEM="${ARRAY_DSK_DISKS[index]}"
-			_DEVICE="/dev/$DEVICE_ORIGEM"
 			MODEL_ORIGEM="${ARRAY_DSK_MODEL[index]}"
 			SIZE_ORIGEM="${ARRAY_DSK_SIZE[index]}"
 			TRAN_ORIGEM="${ARRAY_DSK_TRAN[index]}"
+			_DEVICE="/dev/$DEVICE_ORIGEM"
+			if [[ "$TRAN_ORIGEM" == "nvme" || "$TRAN_ORIGEM" == "loop" ]]; then
+				_PART_BOOT="${_DEVICE}p2"
+				_PART_ROOT="${_DEVICE}p3"
+	      else
+				_PART_BOOT="${_DEVICE}2"
+				_PART_ROOT="${_DEVICE}3"
+      	fi
 			sh_backup_partitions "${sd}" "${DEVICE_ORIGEM}"
 			return 0
 		fi
@@ -855,4 +862,5 @@ sh_checktarball
 sh_choosedisk
 sh_confadduser
 #sh_dryrun
+clear
 sh_install
