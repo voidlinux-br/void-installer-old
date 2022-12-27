@@ -101,9 +101,9 @@ _PART_BIOS="/dev/loop11p1"
 _PART_BOOT="/dev/loop11p2"
 _PART_ROOT="/dev/loop11p3"
 #_TARBALL_ROOTFS='void-x86_64-ROOTFS-20221001.tar.xz'
-#_TARBALL_ROOTFS='void-x86_64-base-minimal-20221226.tar.xz'
-#_TARBALL_ROOTFS='void-x86_64-base-voidstrap-20221226.tar.xz'
-_TARBALL_ROOTFS='void-x86_64-base-system-20221226.tar.xz'
+_TARBALL_ROOTFS='void-x86_64-base-minimal-current.tar.xz'
+#_TARBALL_ROOTFS='void-x86_64-base-voidstrap-current.tar.xz'
+#_TARBALL_ROOTFS='void-x86_64-base-system-current.tar.xz'
 _USER="void"
 _PASSWD_USER="void"
 _PASSWD_ROOT="voidlinux"
@@ -158,7 +158,7 @@ sh_checknet() {
 sh_checktarball() {
 	msg "INFO" "$(log_info_msg "Checando existência do tarball rootfs $_TARBALL_ROOTFS")"
 	if ! test -r "$_TARBALL_ROOTFS"; then
-	   evaluate_retval 1
+	   evaluate_retval "1" "$err_not_fatal"
 		msg "INFO" "$(log_info_msg "Tarball rootfs $_TARBALL_ROOTFS não localizado. Procedendoo com download")"
 		curl --insecure --silent --remote-name "$url_mirror/live/current/$_TARBALL_ROOTFS" >/dev/null 2>&1 ||
       {
