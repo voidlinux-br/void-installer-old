@@ -912,7 +912,7 @@ ${white}${APP} v$_VERSION_${reset}
 ${orange}usage: ${APP} [options] ${reset}
 
 [options] ${reset}
-   ${red}-i  --install${cyan}       # Use Curl download for test
+   ${red}-i  --install${cyan}       # Instalar
    ${red}-c  --chroot${cyan}        # Rodar chroot na partição instalada
    ${red}-a  --auto${cyan}          # automatically configure/write in /etc/xbps.d/ with result obtained results
    ${red}-g  --grafico${cyan}       # Ativar modo grafico
