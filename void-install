@@ -3,7 +3,7 @@
 
 #  void-install
 #  Created: 2022/12/24
-#  Altered: 2022/12/26
+#  Altered: 2022/12/27
 #
 #  Copyright (c) 2022-2022, Vilmar Catafesta <vcatafesta@gmail.com>
 #                2022-2022, Felipe Nogueira <contato.fnog@gmail.com>
@@ -35,7 +35,7 @@
 
 #system
 APP="${0##*/}"
-_VERSION_='1.1.20221226'
+_VERSION_='1.75.20221227'
 readonly DEPENDENCIES=(tar wget sed cat chroot tput printf blkid fdisk mkfs.ext4 mkfs.ext2 dialog sfdisk lsblk)
 declare -A AsUser
 declare -i quiet=0 grafico=0 auto=0
@@ -243,9 +243,12 @@ DOT() {
 }
 
 log_info_msg() {
-#	last_msg="$@"
+	#	last_msg="$@"
 	last_msg="$*"
-	echo -n -e "${BMPREFIX}${@}"
+
+	if ! (( quiet )); then
+		echo -n -e "${BMPREFIX}${@}"
+	fi
 	return 0
 }
 
@@ -253,7 +256,7 @@ evaluate_retval() {
    local error_value="$?"
 	local	error_fatal="$2"
 
-	[[ -z "$error_fatal" ]] && error_fatal=1
+	[[ -z "$error_fatal" ]] && error_fatal=$true
 
    if [ $# -gt 0 ]; then
       error_value="$1"
@@ -265,36 +268,42 @@ evaluate_retval() {
    	log_failure_msg2 ''
    fi
 
-	if (( error_value  )) ; then
+	if (( error_value )) ; then
 		if (( error_fatal )) ; then
-			die "Finalizando."
+			die "Instalação abortada..."
 		fi
 	fi
 	return "${error_value}"
 }
 
 log_failure_msg2() {
-   echo -n -e "${BMPREFIX}${@}"
-   echo    -e  "${CURS_ZERO}${FAILURE_PREFIX}${SET_COL}${FAILURE_SUFFIX}"
-	logmessage=$(sed 's/\\\033[^a-zA-Z]*.//g' <<< "$last_msg")
-	echo -e "$(timespec) ${logmessage} OK" >> "${BOOTLOG}"
-   return 0
+	if ! (( quiet )); then
+	   echo -n -e "${BMPREFIX}${@}"
+	   echo    -e  "${CURS_ZERO}${FAILURE_PREFIX}${SET_COL}${FAILURE_SUFFIX}"
+		logmessage=$(sed 's/\\\033[^a-zA-Z]*.//g' <<< "$last_msg")
+		echo -e "$(timespec) ${logmessage} OK" >> "${BOOTLOG}"
+	fi
+	return 0
 }
 
 log_success_msg()
 {
-	echo -n -e "${BMPREFIX}${@}"
-	echo    -e "${CURS_ZERO}${SUCCESS_PREFIX}${SET_COL}${SUCCESS_SUFFIX}"
-	logmessage=$(sed 's/\\\033[^a-zA-Z]*.//g' <<< "$last_msg")
-	echo -e "$(timespec) ${logmessage} OK" >> "${BOOTLOG}"
+	if ! (( quiet )); then
+		echo -n -e "${BMPREFIX}${@}"
+		echo    -e "${CURS_ZERO}${SUCCESS_PREFIX}${SET_COL}${SUCCESS_SUFFIX}"
+		logmessage=$(sed 's/\\\033[^a-zA-Z]*.//g' <<< "$last_msg")
+		echo -e "$(timespec) ${logmessage} OK" >> "${BOOTLOG}"
+	fi
 	return 0
 }
 
 log_success_msg2() {
-   echo -n -e "${BMPREFIX}${@}"
-   echo    -e  "${CURS_ZERO}${SUCCESS_PREFIX}${SET_COL}${SUCCESS_SUFFIX}"
-	logmessage=$(sed 's/\\\033[^a-zA-Z]*.//g' <<< "$last_msg")
-	echo -e "$(timespec) ${logmessage} OK" >> "${BOOTLOG}"
+	if ! (( quiet )); then
+	   echo -n -e "${BMPREFIX}${@}"
+	   echo    -e  "${CURS_ZERO}${SUCCESS_PREFIX}${SET_COL}${SUCCESS_SUFFIX}"
+		logmessage=$(sed 's/\\\033[^a-zA-Z]*.//g' <<< "$last_msg")
+		echo -e "$(timespec) ${logmessage} OK" >> "${BOOTLOG}"
+	fi
    return 0
 }
 
@@ -305,6 +314,7 @@ timespec() {
 	return 0
 }
 
+#     10 60
 msg() {
    if (( grafico )); then
       ${DIALOG}               \
@@ -312,7 +322,7 @@ msg() {
       --title     "$1"        \
       --backtitle "$ccabec"   \
       --infobox   "\n$2"      \
-      10 60
+      8 60
    else
       log_info_msg "$2"
    fi
@@ -334,6 +344,18 @@ readconf()
    [[ ${REPLY^} == N ]]  && return $true || return $false
 }
 
+alerta() {
+	if (( grafico )); then
+		${DIALOG}               			\
+		--title  "$1"                    \
+		--backtitle "$ccabec"            \
+		--msgbox    "$2\n$3\n$4\n$5\n$6" \
+		10 60
+	else
+		log_success_msg "$2"
+	fi
+}
+
 conf() {
    ${DIALOG}                     \
       --title     "$1"           \
@@ -341,48 +363,68 @@ conf() {
       --yes-label "$yeslabel"    \
       --no-label  "$nolabel"     \
       --yesno     "$2"           \
-      10 100
+      8 60
    return $?
 }
 
-
 sh_testdisk(){
 	local result=0
+
 	fdisk -l "$_DEVICE" > /dev/null 2>&1
 	result="$?"
-	evaluate_retval "$result"
+	if ! (( quiet )); then
+		evaluate_retval "$result"
+	fi
 	return "$result"
 }
 
 sh_mkparted(){
+	local nchoice=0
+
 	msg "INFO" "$(log_info_msg "Testando disco ${_DEVICE} configurado em $app_conf")"
 	if ! sh_testdisk; then
 		die "Erro de leitura de disco: $_DEVICE. Check configuração em $app_conf"
 	fi
-	replicate "=" "$COLUMNS"
-	if ! fdisk -l "$_DEVICE"; then
-		die "Erro de leitura de disco: $_DEVICE. Check configuração em $app_conf"
+
+	if ! (( grafico )); then
+		if ! (( quiet )); then
+			replicate "=" "$COLUMNS"
+			if ! fdisk -l "$_DEVICE"; then
+				die "Erro de leitura de disco: $_DEVICE. Check configuração em $app_conf"
+			fi
+			replicate "=" "$COLUMNS"
+			echo "${red}AVISO, CUIDADO, tudo será apagado!!${reset}"
+			replicate "=" "$COLUMNS"
+		fi
 	fi
-	replicate "=" "$COLUMNS"
-	echo "${red}AVISO, CUIDADO, tudo será apagado!!${reset}"
-	replicate "=" "$COLUMNS"
-	if readconf "Continuar com o particionamento em ${_DEVICE} ?" ; then
+
+	if ! (( grafico )); then
+		if readconf "Continuar com o particionamento em ${_DEVICE} ?"; then
+			nchoice=$true
+		fi
+	else
+		if conf "AVISO, CUIDADO, tudo será apagado" "\nContinuar com o particionamento em ${_DEVICE} ?\n" ; then
+			nchoice=$true
+		fi
+	fi
+
+	if (( nchoice )); then
 		msg "INFO" "$(log_info_msg "Criando partições em ${_DEVICE}")"
-	   parted --script "$_DEVICE" --                                   		\
-	      mklabel gpt                                                       \
-	      mkpart primary fat32      1MiB 3MiB   set 1 bios on name 1 BIOS   \
-	      mkpart primary fat32      3MiB 128MiB set 2 esp  on name 2 EFI    \
-	      mkpart primary ext4       128MiB 100%               name 3 ROOT   \
-	      align-check optimal 1
+		parted --script "$_DEVICE" --                                   		\
+			mklabel gpt                                                       \
+			mkpart primary fat32      1MiB 3MiB   set 1 bios on name 1 BIOS   \
+			mkpart primary fat32      3MiB 128MiB set 2 esp  on name 2 EFI    \
+			mkpart primary ext4       128MiB 100%               name 3 ROOT   \
+			align-check optimal 1
 		evaluate_retval "$?"
 		#parted --script "$_DEVICE" -- print
 	else
-		die "Finalizando..."
+		die "Instalação abortada..."
 	fi
 }
 
 sh_update_mirror() {
-	msg "INFO" "$(log_info_msg "Configurando mirror em $dir_install")"
+	msg "INFO" "$(log_info_msg "Configurando mirror em $_PART_ROOT:$dir_install")"
 	cat > "$dir_install/etc/xbps.d/00-reposytory-main.conf" <<- EOF
 repository=$url_mirror/current
 repository=$url_mirror/current/nonfree
@@ -393,7 +435,7 @@ EOF
 }
 
 sh_update_rc() {
-	msg "INFO" "$(log_info_msg "Ajustando rc.local em $dir_install")"
+	msg "INFO" "$(log_info_msg "Ajustando rc.local em $_PART_ROOT:$dir_install")"
 	cat > "$dir_install"/etc/rc.local <<- EOF
 HOSTNAME="${_HOSTNAME}"
 HARDWARECLOCK="${_CLOCK}"
@@ -404,7 +446,7 @@ EOF
 }
 
 sh_update_locale() {
-	msg "INFO" "$(log_info_msg "Ajustando locale.conf em $dir_install")"
+	msg "INFO" "$(log_info_msg "Ajustando locale.conf em $_PART_ROOT:$dir_install")"
 	cat > "$dir_install/etc/locale.conf" <<- EOF
 LANG=en_US.UTF-8
 LC_COLLATE=C
@@ -414,13 +456,13 @@ EOF
 }
 
 sh_update_hostname() {
-	msg "INFO" "$(log_info_msg "Ajustando hostname em $dir_install")"
+	msg "INFO" "$(log_info_msg "Ajustando hostname em $_PART_ROOT:$dir_install")"
 	echo "${_HOSTNAME}" > $dir_install/etc/hostname
 	evaluate_retval "$?"
 }
 
 sh_update_timezone() {
-	msg "INFO" "$(log_info_msg "Ajustando timezone em $dir_install")"
+	msg "INFO" "$(log_info_msg "Ajustando timezone em $_PART_ROOT:$dir_install")"
 	sed -e "/en_US.UTF-8 UTF-8/s/^\#//" -i "$dir_install/etc/default/libc-locales"
 	sed -e "/pt_BR.UTF-8 UTF-8/s/^\#//" -i "$dir_install/etc/default/libc-locales"
 	ln -sf "$dir_install/usr/share/zoneinfo/${_TIMEZONE}" "$dir_install/etc/localtime"
@@ -428,7 +470,7 @@ sh_update_timezone() {
 }
 
 sh_set_keymap(){
-	msg "INFO" "$(log_info_msg "Ajustando teclado em $dir_install")"
+	msg "INFO" "$(log_info_msg "Ajustando teclado em $_PART_ROOT:$dir_install")"
    [[ ! -e $dir_install/etc/vconsole.conf  ]] && >| $dir_install/etc/vconsole.conf
 	if [[ -f $dir_install/etc/vconsole.conf ]]; then
 		echo "KEYMAP=$_KEYMAP" >> $dir_install/etc/vconsole.conf
@@ -440,7 +482,7 @@ sh_set_keymap(){
 }
 
 sh_update_bashrc(){
-	msg "INFO" "$(log_info_msg "Ajustando bashrc em $dir_install")"
+	msg "INFO" "$(log_info_msg "Ajustando bashrc em $_PART_ROOT:$dir_install")"
    [[ ! -e $dir_install/etc/bash/bashrc.d/bashrc.sh ]] && >| $dir_install/etc/bash/bashrc.d/bashrc.sh
 	if [[ -f $dir_install/etc/bash/bashrc.d/bashrc.sh ]]; then
 		echo -e "PS1='\e[32;1m\u \e[33;1m→ \e[36;1m\h \e[37;0m\w\n\e[35;1m�# \e[m'" >> "$dir_install/etc/bash/bashrc.d/bashrc.sh"
@@ -458,13 +500,13 @@ sh_mkfs() {
 }
 
 sh_umountfs(){
-	msg "INFO" "$(log_info_msg "Desmontando sistema de arquivo em $dir_install")"
+	msg "INFO" "$(log_info_msg "Desmontando sistema de arquivo em $_PART_ROOT:$dir_install")"
 	umount -frl "$dir_install" > /dev/null 2>&1
 	evaluate_retval "$?" "$err_not_fatal"
 }
 
 sh_bind() {
-	msg "INFO" "$(log_info_msg "Montando ambiente chroot em $dir_install")"
+	msg "INFO" "$(log_info_msg "Montando ambiente chroot em $_PART_ROOT:$dir_install")"
 	mount -t proc  /proc "$dir_install/proc" > /dev/null 2>&1
 	mount -t sysfs /sys  "$dir_install/sys"  > /dev/null 2>&1
 	mount -o bind  /dev  "$dir_install/dev"  > /dev/null 2>&1
@@ -543,13 +585,14 @@ sh_stopbind()
 sh_chroot_job() {
 	local cmsg="$1"
 	local cjob="$2"
-	local retval=0
+	local erro_fatal="$3"
+	local lretval=0
 
 	msg "INFO" "$(log_info_msg "$cmsg")"
 	chroot "$dir_install" "$shell" -c "$cjob" > /dev/null 2>&1
-	retval="$?"
-	evaluate_retval "$retval"
-	return "$retval"
+	lretval="$?"
+	evaluate_retval "$lretval" "$erro_fatal"
+	return "$lretval"
 }
 
 sh_mkuser() {
@@ -569,7 +612,7 @@ sh_mkuser() {
 }
 
 sh_mkfstab() {
-	msg "INFO" "$(log_info_msg "Criando fstab em $dir_install")"
+	msg "INFO" "$(log_info_msg "Criando fstab em $_PART_ROOT:$dir_install")"
 cat > "$dir_install/etc/fstab" <<- EOF
 UUID=$(blkid -o value -s UUID "${_PART_BOOT}") /boot	ext2 defaults 0 2
 UUID=$(blkid -o value -s UUID "${_PART_ROOT}") / 		ext4 defaults 0 1
@@ -583,7 +626,7 @@ sh_mkservice() {
 
 	for service in "${aServices[@]}"
 	do
-		sh_chroot_job "Ativando serviço $service em $dir_install" "ln -sf /etc/sv/$service /etc/runit/runsvdir/current/"
+		sh_chroot_job "Ativando serviço $service em $_PART_ROOT:$dir_install" "ln -sf /etc/sv/$service /etc/runit/runsvdir/current/"
 	done
 }
 
@@ -598,7 +641,7 @@ sh_mkdir() {
 					"$dir_install/etc/xbps.d"
 					)
 
-	msg "INFO" "$(log_info_msg "Criando diretorios em $dir_install")"
+	msg "INFO" "$(log_info_msg "Criando diretorios em $_PART_ROOT:$dir_install")"
 	for cdir in "${adir[@]}"
 	do
 		[[ -d "$cdir" ]] || mkdir -p "$cdir"
@@ -607,7 +650,7 @@ sh_mkdir() {
 }
 
 sh_mount() {
-	msg "INFO" "$(log_info_msg "Montando sistema de arquivos em $dir_install")"
+	msg "INFO" "$(log_info_msg "Montando sistema de arquivos em $_PART_ROOT:$dir_install")"
 	mkdir -p "$dir_install"
 	mount "${_PART_ROOT}" "$dir_install"
 	mkdir -p "$dir_install/boot"
@@ -628,40 +671,42 @@ sh_install() {
 	sh_mount
 	sh_mkdir
 
-	msg "INFO" "$(log_info_msg "Instalando rootfs em $dir_install")"
+	msg "INFO" "$(log_info_msg "Instalando rootfs em $_PART_ROOT:$dir_install")"
 	if tar xpf "$_TARBALL_ROOTFS" --xattrs-include='*.*' --numeric-owner -C $dir_install > /dev/null 2>&1; then
 		evaluate_retval "$?"
 		sh_bind
 
-		msg "INFO" "$(log_info_msg "Ajustando /etc/resolv.conf em $dir_install")"
+		msg "INFO" "$(log_info_msg "Ajustando /etc/resolv.conf em $_PART_ROOT:$dir_install")"
 		cp /etc/resolv.conf "$dir_install/etc/" > /dev/null 2>&1
 		evaluate_retval "$?"
 
 		sh_update_mirror
-		sh_chroot_job "Atualizando repositorio em $dir_install" "xbps-install -Suy xbps"
-		sh_chroot_job "Atualizando sistema em $dir_install" "xbps-install -uy"
+		sh_chroot_job "Atualizando repositorio em $_PART_ROOT:$dir_install" "xbps-install -Suy xbps"
+		sh_chroot_job "Atualizando sistema em $_PART_ROOT:$dir_install" "xbps-install -uy"
 
 		for pkg in "${apkgs[@]}"
 		do
-			sh_chroot_job "Instalando $pkg em $dir_install" "xbps-install -y $pkg"
+			sh_chroot_job "Instalando $pkg em $_PART_ROOT:$dir_install" "xbps-install -y $pkg"
 		done
 
-		sh_chroot_job "Instalando pacotes adicionais em $dir_install" "xbps-install -y $_PKGS"
+		sh_chroot_job "Instalando pacotes adicionais em $_PART_ROOT:$dir_install" "xbps-install -y $_PKGS"
 		sh_chroot_job "Instalando GRUB i386-pc no $_DEVICE" "grub-install --target=i386-pc $_DEVICE --recheck"
 #		sh_chroot_job "Instalando GRUB EFI na partição: $dir_install/boot/efi" "grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=$cnickefi --recheck"
-		sh_chroot_job "Gerando grub.cfg em $dir_install" "grub-mkconfig -o /boot/grub/grub.cfg"
+		sh_chroot_job "Gerando grub.cfg em $_PART_ROOT:$dir_install" "grub-mkconfig -o /boot/grub/grub.cfg"
 		sh_update_hostname
 		sh_update_rc
 		sh_update_timezone
-		sh_chroot_job "Reconfigurando locales em $dir_install" "xbps-reconfigure -f glibc-locales"
+		sh_chroot_job "Reconfigurando locales em $_PART_ROOT:$dir_install" "xbps-reconfigure -f glibc-locales"
 		sh_update_locale
 		sh_mkuser
 		sh_mkfstab
 		sh_set_keymap
 		sh_update_bashrc
-		sh_chroot_job "Certificando que todos pacotes estejam configurados corretamente em $dir_install" "xbps-reconfigure -fa"
+		sh_chroot_job "Certificando que todos pacotes estejam configurados corretamente em $_PART_ROOT:$dir_install" "xbps-reconfigure -fa"
 		sh_mkservice
-		sh_chroot_job "Removendo pacote bootstrap em $dir_install" "xbps-remove -y base-voidstrap" "$err_not_fatal"
+		sh_chroot_job "Removendo pacote bootstrap em $_PART_ROOT:$dir_install" "xbps-remove -y base-voidstrap" "$err_not_fatal"
+		quiet=$false
+		alerta "$ccabec" "Instalação finalizada com sucesso."
 	else
 		evaluate_retval "$?"
 		die "Erro tar #$?. Problemas para descompactar o tarball $_TARBALL_ROOTFS em $dir_install"
@@ -761,7 +806,7 @@ sh_choosedisk() {
 			"$DIALOG" --clear --backtitle "$ccabec" --yesno "Deseja sair sem instalar?" 0 0
 			case $? in
 	      	"$D_OK")
-					die "Finalizando..."
+					die "Instalação abortada..."
              	break
 	            ;;
 				"$D_CANCEL")
@@ -844,7 +889,7 @@ sh_confadduser()
 		         "$DIALOG" --clear --backtitle "$ccabec" --yesno "Deseja sair sem instalar?" 0 0
 		         case $? in
 		            "$D_OK")
-		               die "Finalizando..."
+		               die "Instalação abortada..."
 		               break
 		               ;;
 		            "$D_CANCEL")
@@ -894,7 +939,7 @@ sh_confadduser()
    done
 }
 
-sh_dryrun(){
+sh_dryrun() {
 	sh_umountfs
 	sh_mount
 	sh_bind
@@ -907,56 +952,57 @@ sh_version() {
 }
 
 sh_usage() {
-   cat <<EOF
+	cat <<EOF
 ${white}${APP} v$_VERSION_${reset}
 ${orange}usage: ${APP} [options] ${reset}
 
 [options] ${reset}
-   ${red}-i  --install${cyan}       # Instalar
-   ${red}-c  --chroot${cyan}        # Rodar chroot na partição instalada
-   ${red}-a  --auto${cyan}          # automatically configure/write in /etc/xbps.d/ with result obtained results
-   ${red}-g  --grafico${cyan}       # Ativar modo grafico
-   ${red}-q  --quiet${cyan}         # Saida resumida
-   ${red}-V  --version${cyan}       # Mostrar versao do aplicativo
-   ${red}-n  --nocolor${cyan}       # Remove cores da saida${reset}
+	${red}-i  --install${cyan}       # Instalar
+	${red}-c  --chroot${cyan}        # Rodar chroot na partição instalada
+	${red}-a  --auto${cyan}          # automatically configure/write in /etc/xbps.d/ with result obtained results
+	${red}-g  --grafico${cyan}       # Ativar modo grafico
+	${red}-q  --quiet${cyan}         # Saida resumida
+	${red}-V  --version${cyan}       # Mostrar versao do aplicativo
+	${red}-n  --nocolor${cyan}       # Remove cores da saida
+	${red}-h  --help${cyan}          # Este help${reset}
 EOF
 }
 
 init() {
-   while test $# -gt 0; do
-      case $1 in
-         -h | -H | --help)
-            sh_usage
-            exit $(($# ? 0 : 1))
-            ;;
-         -V | --version)
-            sh_version
-            exit $(($# ? 0 : 1))
-            ;;
-         -n | --nocolor)
-            unsetvarcolors
-            ;;
-         -q | --quiet)
-            quiet=1
-            ;;
-         -g | --grafico)
-            grafico=1
-            ;;
-         -a | --auto)
-            LAUTO=1
-            ;;
-         -i | -I | --install)
+	while test $# -gt 0; do
+		case $1 in
+			-h | -H | --help)
+				sh_usage
+				exit $(($# ? 0 : 1))
+				;;
+			-V | --version)
+				sh_version
+				exit $(($# ? 0 : 1))
+				;;
+			-n | --nocolor)
+				unsetvarcolors
+				;;
+			-q | --quiet)
+				quiet=1
+				;;
+			-g | --grafico)
+				grafico=1
+				;;
+			-a | --auto)
+				LAUTO=1
+				;;
+			-i | -I | --install)
 				LINSTALL=1
-            appexec+=('sh_install')
-            ;;
-         -c | -C | --chroot)
+				appexec+=('sh_install')
+				;;
+			-c | -C | --chroot)
 				LCHROOT=1
-            appexec+=('sh_dryrun')
-            ;;
-         *) die "operação não suportada: $1 (use -h for help)" ;;
-      esac
-      shift
-   done
+				appexec+=('sh_dryrun')
+				;;
+			*) die "operação não suportada: $1 (use -h for help)" ;;
+		esac
+		shift
+	done
 }
 
 sh_ambiente
