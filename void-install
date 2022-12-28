@@ -196,9 +196,9 @@ setvarcolors() {
    bold=$(tput bold);
 	blue=$(tput setaf 33);
 	cyan=$(tput setaf 37);
+	orange=$(tput setaf 166);
   	#yellow=$(tput setaf 136);
    #pink=$(tput setaf 129)
-	#orange=$(tput setaf 166);
    #white=$(tput setaf 15);
    #violet=$(tput setaf 61);
 	#purple=$(tput setaf 125);
@@ -211,9 +211,9 @@ unsetvarcolors() {
 	bold=''
 	blue=''
 	cyan=''
+	orange=''
 	#yellow=''
 	#pink=''
-	#orange=''
 	#white=''
 	#violet=''
    #purple=''
