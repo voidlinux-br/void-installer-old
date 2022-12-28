@@ -35,8 +35,8 @@
 
 #system
 APP="${0##*/}"
-_VERSION_='1.75.20221227'
-readonly DEPENDENCIES=(tar wget sed cat chroot tput printf blkid fdisk mkfs.ext4 mkfs.ext2 dialog sfdisk lsblk)
+_VERSION_='0.75.20221227'
+readonly DEPENDENCIES=(tar wget sed cat chroot tput printf blkid fdisk mkfs.ext4 mkfs.ext2 mkfs.btrfs mkfs.xfs dialog sfdisk lsblk)
 declare -A AsUser
 declare -i quiet=0 grafico=0 auto=0
 declare -i LAUTO=0 LINSTALL=0 LCHROOT=0
@@ -53,7 +53,7 @@ sh_ambiente() {
 	readonly ccreatenewuser='Configurações'
 	readonly cmsgadduser='Criando usuario'
 	readonly cmsgchgpasswd='Ajustando senha'
-	readonly cdisco='DISCO'
+	readonly cdisco='Escolha DISCO destino'
  	readonly cchoosedisk='Escolha o disco:'
 	readonly cmsg_part_disk='Visualizar partições do disco'
 	readonly cmsgpart='Particionamento automatico'
@@ -68,7 +68,9 @@ sh_ambiente() {
 	readonly shell='/bin/sh'
 	readonly BOOTLOG="/tmp/void-install-$(sh_diahora).log"
 
-	: "${ccabec="$APP ${_VERSION_}"}"
+	: "${mkfs='EXT4'}"
+
+	: "${ccabec="$APP v${_VERSION_}"}"
 	: "${DIALOG=${DIALOG:-"dialog"}}"
 	# flag dialog exit status codes
    : "${D_OK=0}"
@@ -197,8 +199,8 @@ setvarcolors() {
 	blue=$(tput setaf 33);
 	cyan=$(tput setaf 37);
 	orange=$(tput setaf 166);
+   pink=$(tput setaf 129)
   	#yellow=$(tput setaf 136);
-   #pink=$(tput setaf 129)
    #white=$(tput setaf 15);
    #violet=$(tput setaf 61);
 	#purple=$(tput setaf 125);
@@ -212,8 +214,8 @@ unsetvarcolors() {
 	blue=''
 	cyan=''
 	orange=''
+	pink=''
 	#yellow=''
-	#pink=''
 	#white=''
 	#violet=''
    #purple=''
@@ -494,8 +496,15 @@ sh_mkfs() {
 	msg "INFO" "$(log_info_msg "Formatando particao ${_PART_BOOT} FS ext2")"
 	mkfs.ext2 -F -L "EFI" "${_PART_BOOT}" > /dev/null 2>&1
 	evaluate_retval "$?"
-	msg "INFO" "$(log_info_msg "Formatando particao ${_PART_ROOT} FS ext4")"
-	mkfs.ext4 -F -L "VOID" "${_PART_ROOT}" > /dev/null 2>&1
+
+	msg "INFO" "$(log_info_msg "Formatando particao ${_PART_ROOT} FS ${mkfs,,}")"
+   if [[ "$mkfs" == "EXT4" ]]; then
+		mkfs.ext4 -F -L "VOID" "${_PART_ROOT}" > /dev/null 2>&1
+   elif [[ "$mkfs" == "BTRFS" ]]; then
+		mkfs.btrfs -f -L "VOID" "${_PART_ROOT}" > /dev/null 2>&1
+   elif [[ "$mkfs" == "XFS" ]]; then
+		mkfs.xfs -f -L "VOID" "${_PART_ROOT}" > /dev/null 2>&1
+	fi
 	evaluate_retval "$?"
 }
 
@@ -615,7 +624,7 @@ sh_mkfstab() {
 	msg "INFO" "$(log_info_msg "Criando fstab em $_PART_ROOT:$dir_install")"
 cat > "$dir_install/etc/fstab" <<- EOF
 UUID=$(blkid -o value -s UUID "${_PART_BOOT}") /boot	ext2 defaults 0 2
-UUID=$(blkid -o value -s UUID "${_PART_ROOT}") / 		ext4 defaults 0 1
+UUID=$(blkid -o value -s UUID "${_PART_ROOT}") / 		${mkfs,,} defaults 0 1
 EOF
 	evaluate_retval "$?"
 }
@@ -665,6 +674,7 @@ sh_install() {
 	sh_checknet "$URL_GOOGLE" || return 1
 	sh_checktarball
 	sh_choosedisk
+	sh_choosefilesystem
 	sh_confadduser "$@"
 	if ! sh_mkparted; then die "Erro"; fi
 	if ! sh_mkfs 	 ; then die "Erro"; fi
@@ -772,11 +782,43 @@ sh_disk_info() {
 	done < <(lsblk -PAo TYPE,NAME,PATH,SIZE,TRAN,MODEL,LABEL,SERIAL | grep -P 'TYPE="(disk|loop|lvm)"' | sort -k5,5 -k2,2)
 }
 
+sh_choosefilesystem() {
+	local cbtrfs='off'
+	local cxfs='off'
+	local cext4='on'
+	local cextra
+	local exit_status
+
+	cextra="↓ é recomendável EXT4 ↓"
+	mkfs=$(${DIALOG} --radiolist "Escolha o filesystem\n\n$cextra" \
+		0 0 0                                                       \
+		EXT4     "Rápido e maduro"                   $cext4         \
+		BTRFS    "Novos recursos, que são novidades" $cbtrfs        \
+		XFS      "Alto desempenho"                   $cxfs          \
+		2>&1 >/dev/tty )
+
+	exit_status=$?
+	case $exit_status in
+		"$D_ESC"|"$D_CANCEL")
+	       "$DIALOG" --clear --backtitle "$ccabec" --yesno "Deseja sair sem instalar?" 0 0
+	         case $? in
+	            "$D_OK")
+	               die "Instalação abortada..."
+	               break
+	               ;;
+	            "$D_CANCEL")
+	               exit_status=99
+	               continue
+	               ;;
+	         esac
+		;;
+	esac
+}
+
 sh_choosedisk() {
 	while true
 	do
 		sh_disk_info
-		local xmsg="$cdisco"
 		local array=()
 		local i
 		local n=0
@@ -792,8 +834,8 @@ sh_choosedisk() {
 		done
 
     	sd=$(${DIALOG}  																				\
-    				--title 			"$xmsg"								  							\
-    				--backtitle	 	"$ccabec"				 										\
+    				--backtitle	 	"$ccabec - Configuração disco destino"					\
+    				--title 			"$cdisco"							  							\
     				--cancel-label "$buttonback"													\
     				--colors																				\
 	            --extra-button                                                    \
@@ -954,17 +996,17 @@ sh_version() {
 sh_usage() {
 	cat <<EOF
 ${white}${APP} v$_VERSION_${reset}
-${orange}usage: ${APP} [options] ${reset}
+${orange}usage: ${APP} ${reset}[<options>]
 
-[options] ${reset}
-	${red}-i  --install${cyan}       # Instalar
-	${red}-c  --chroot${cyan}        # Rodar chroot na partição instalada
-	${red}-a  --auto${cyan}          # automatically configure/write in /etc/xbps.d/ with result obtained results
-	${red}-g  --grafico${cyan}       # Ativar modo grafico
-	${red}-q  --quiet${cyan}         # Saida resumida
-	${red}-V  --version${cyan}       # Mostrar versao do aplicativo
-	${red}-n  --nocolor${cyan}       # Remove cores da saida
-	${red}-h  --help${cyan}          # Este help${reset}
+[<options>] ${reset}
+   ${red}-i  --install${cyan}       # Instalar
+   ${red}-c  --chroot${cyan}        # Rodar chroot na partição instalada
+   ${red}-a  --auto${cyan}          # automatically configure/write in /etc/xbps.d/ with result obtained results
+   ${red}-g  --grafico${cyan}       # Ativar modo grafico
+   ${red}-q  --quiet${cyan}         # Saida resumida
+   ${red}-V  --version${cyan}       # Mostrar versao do aplicativo
+   ${red}-n  --nocolor${cyan}       # Remove cores da saida
+   ${red}-h  --help${cyan}          # Este help${reset}
 EOF
 }
 
@@ -1009,7 +1051,6 @@ sh_ambiente
 sh_ascii_lines
 setvarcolors
 log_prefix
-sh_checkroot
 checkDependencies
 sh_config
 
@@ -1024,4 +1065,5 @@ case $(( LINSTALL+LCHROOT )) in
       0) die 'nenhum operação especificada (use -h para ajuda)' ;;
    [^1]) die 'apenas uma operação pode ser usada por vez' ;;
 esac
+sh_checkroot
 for x in "${appexec[@]}"; do $x; done
