@@ -3,7 +3,7 @@
 
 #  void-install
 #  Created: 2022/12/24
-#  Altered: 2022/12/27
+#  Altered: 2022/12/28
 #
 #  Copyright (c) 2022-2022, Vilmar Catafesta <vcatafesta@gmail.com>
 #                2022-2022, Felipe Nogueira <contato.fnog@gmail.com>
@@ -35,11 +35,20 @@
 
 #system
 APP="${0##*/}"
-_VERSION_='0.75.20221227'
-readonly DEPENDENCIES=(tar wget sed cat chroot tput printf blkid fdisk mkfs.ext4 mkfs.ext2 mkfs.btrfs mkfs.xfs dialog sfdisk lsblk)
+_VERSION_='0.90.20221228'
+readonly DEPENDENCIES=(tar wget sed cat grep chroot tput printf blkid fdisk mkfs.ext4 mkfs.ext2 mkfs.btrfs mkfs.xfs dialog sfdisk lsblk)
 declare -A AsUser
 declare -i quiet=0 grafico=0 auto=0
 declare -i LAUTO=0 LINSTALL=0 LCHROOT=0
+declare _DEVICE='/dev/loop11'
+declare _PART_BIOS="/dev/loop11p1"
+declare _PART_BOOT="/dev/loop11p2"
+declare _PART_ROOT="/dev/loop11p3"
+declare _FULLNAME=""
+declare _USER="void"
+declare _PASSWD_USER="void"
+declare _PASSWD_ROOT="voidlinux"
+declare _HOSTNAME="voidlinux"
 
 sh_ambiente() {
 	#export LC_ALL=C
@@ -57,6 +66,9 @@ sh_ambiente() {
  	readonly cchoosedisk='Escolha o disco:'
 	readonly cmsg_part_disk='Visualizar partições do disco'
 	readonly cmsgpart='Particionamento automatico'
+	readonly cwarning='** AVISO **'
+	readonly cmsg_dismount='Desmontar?'
+	readonly cmsg_all_mounted_part='O disco selecionado contém partições montadas'
 	readonly buttonback='Finalizar'
    readonly buttonpart='Info disco'
 	readonly yeslabel='Sim'
@@ -67,9 +79,7 @@ sh_ambiente() {
 	readonly err_not_fatal=0
 	readonly shell='/bin/sh'
 	readonly BOOTLOG="/tmp/void-install-$(sh_diahora).log"
-
 	: "${mkfs='EXT4'}"
-
 	: "${ccabec="$APP v${_VERSION_}"}"
 	: "${DIALOG=${DIALOG:-"dialog"}}"
 	# flag dialog exit status codes
@@ -99,19 +109,19 @@ sh_touchconf(){
 # void-install.conf
 # Gerado por void-install
 ######################################################################
-_CONFIG='1'
-_DEVICE='/dev/loop11'
-_PART_BIOS="/dev/loop11p1"
-_PART_BOOT="/dev/loop11p2"
-_PART_ROOT="/dev/loop11p3"
+_DEVICE="$_DEVICE"
+_PART_BIOS="$_PART_BIOS"
+_PART_BOOT="$_PART_BOOT"
+_PART_ROOT="$_PART_ROOT"
 #_TARBALL_ROOTFS='void-x86_64-ROOTFS-20221001.tar.xz'
 #_TARBALL_ROOTFS='void-x86_64-base-minimal-current.tar.xz'
 #_TARBALL_ROOTFS='void-x86_64-base-voidstrap-current.tar.xz'
 _TARBALL_ROOTFS='void-x86_64-base-system-current.tar.xz'
-_USER="void"
-_PASSWD_USER="void"
-_PASSWD_ROOT="voidlinux"
-_HOSTNAME="voidlinux"
+_FULLNAME="$_FULLNAME"
+_USER="$_USER"
+_PASSWD_USER="$_PASSWD_USER"
+_PASSWD_ROOT="$_PASSWD_ROOT"
+_HOSTNAME="$_HOSTNAME"
 _TIMEZONE="America/Porto_Velho"
 _KEYMAP="br-abnt2"
 _CLOCK="UTC"
@@ -257,6 +267,7 @@ log_info_msg() {
 evaluate_retval() {
    local error_value="$?"
 	local	error_fatal="$2"
+	local	cmsgdie="$3"
 
 	[[ -z "$error_fatal" ]] && error_fatal=$true
 
@@ -272,7 +283,7 @@ evaluate_retval() {
 
 	if (( error_value )) ; then
 		if (( error_fatal )) ; then
-			die "Instalação abortada..."
+			[[ -z "$cmsgdie" ]] && die "Instalação abortada..." || die "$cmsgdie"
 		fi
 	fi
 	return "${error_value}"
@@ -488,6 +499,26 @@ sh_update_bashrc(){
    [[ ! -e $dir_install/etc/bash/bashrc.d/bashrc.sh ]] && >| $dir_install/etc/bash/bashrc.d/bashrc.sh
 	if [[ -f $dir_install/etc/bash/bashrc.d/bashrc.sh ]]; then
 		echo -e "PS1='\e[32;1m\u \e[33;1m→ \e[36;1m\h \e[37;0m\w\n\e[35;1m�# \e[m'" >> "$dir_install/etc/bash/bashrc.d/bashrc.sh"
+	fi
+	evaluate_retval "$?"
+}
+
+sh_update_wpa_suplicant(){
+	msg "INFO" "$(log_info_msg "Ajustando wpa_supplicant.conf em $_PART_ROOT:$dir_install")"
+   [[ ! -e $dir_install/etc/wpa_supplicant/wpa_supplicant.conf ]] && >| $dir_install/etc/wpa_supplicant/wpa_supplicant.conf
+	if [[ -f $dir_install/etc/wpa_supplicant/wpa_supplicant.conf ]]; then
+		cat > "$dir_install/etc/wpa_supplicant/wpa_supplicant.conf" <<- EOF
+ctrl_interface=/run/wpa_supplicant
+ctrl_interface_group=wheel
+update_config=1
+fast_reauth=1
+
+network={
+   ssid="MINHA_REDE_WIFI"
+   psk="MINHA_SENHA"
+   mesh_fwding=1
+}
+EOF
 	fi
 	evaluate_retval "$?"
 }
@@ -712,6 +743,7 @@ sh_install() {
 		sh_mkfstab
 		sh_set_keymap
 		sh_update_bashrc
+		sh_update_wpa_suplicant
 		sh_chroot_job "Certificando que todos pacotes estejam configurados corretamente em $_PART_ROOT:$dir_install" "xbps-reconfigure -fa"
 		sh_mkservice
 		sh_chroot_job "Removendo pacote bootstrap em $_PART_ROOT:$dir_install" "xbps-remove -y base-voidstrap" "$err_not_fatal"
@@ -756,7 +788,7 @@ now() {
 sh_setadduser()
 {
    # usuario/senha/hostmame/group
-   AsUser[cfullname]=""
+   AsUser[cfullname]="$_FULLNAME"
    AsUser[cuser]="$_USER"
    AsUser[cpass]="$_PASSWD_USER"
    AsUser[cpassroot]="$_PASSWD_ROOT"
@@ -885,12 +917,28 @@ sh_choosedisk() {
 				_PART_BOOT="${_DEVICE}2"
 				_PART_ROOT="${_DEVICE}3"
       	fi
+			sh_checkdisk
 			sh_backup_partitions "${sd}" "${DEVICE_ORIGEM}"
 			return 0
 		fi
     	break
 	done
 }
+
+sh_checkdisk() {
+	local dsk
+
+	msg "INFO" "$(log_info_msg "Aguardando, checando por partições montadas no disco: $_DEVICE")"
+	dsk=$(df -h | grep "$_DEVICE" | awk '{print $1, $2, $3, $4, $5, $6, $7}')
+
+	if [[ -n "$dsk" ]]; then
+		evaluate_retval "$err_fatal" "$err_fatal" "$cmsg_all_mounted_part: $dsk"
+		return 1
+	fi
+   return 0
+}
+
+
 
 display_result() {
 	local xbacktitle=$ccabec
@@ -915,14 +963,14 @@ sh_confadduser()
          --backtitle       "$cmsgusermanager"         \
          --insecure        "$@"                       \
          --mixedform       "$ccreatenewuser"          \
-         14 50 0                                      \
-         "Nome Completo : " 1 1 "${AsUser[cfullname]}"    1 17 40 0 0 \
-         "Username      : " 2 1 "${AsUser[cuser]}"        2 17 20 0 0 \
-         "Password user : " 3 1 "${AsUser[cpass]}"        3 17 20 0 1 \
-         "Password root : " 4 1 "${AsUser[cpassroot]}"    4 17 20 0 1 \
-         "Hostname      : " 5 1 "${AsUser[chostname]}"    5 17 20 0 0 \
-         "Disco destino : " 6 1 "${_DEVICE}"              6 17 20 0 2 \
-         "Tam/Modelo    : " 7 1 "${SIZE_ORIGEM}/${MODEL_ORIGEM}"        7 17 20 0 2 \
+         0 0 0                                      	\
+         "Nome Completo: "                        1 1 "${AsUser[cfullname]}"           1 28 40 0 0 \
+         "Username: "                             2 1 "${AsUser[cuser]}"               2 28 20 0 0 \
+         "Password user (${AsUser[cpass]}): "     3 1 "${AsUser[cpass]}"               3 28 20 0 1 \
+         "Password root (${AsUser[cpassroot]}): " 4 1 "${AsUser[cpassroot]}"           4 28 20 0 1 \
+         "Hostname: "                             5 1 "${AsUser[chostname]}"           5 28 20 0 0 \
+         "Disco destino: "                        6 1 "${_DEVICE}"                     6 28 20 0 2 \
+         "Tam/Modelo: "                           7 1 "${SIZE_ORIGEM}/${MODEL_ORIGEM}" 7 28 20 0 2 \
          2>&1 1>&3)
          exit_status=$?
 
@@ -972,6 +1020,20 @@ sh_confadduser()
                  fi
                   sh_confadduser
                fi
+
+               if [[ -z "${AsUser[cpassroot]}" ]]; then
+                  if ! conf "*** ROOT ***" "\nSenha de root não pode ser vazia! Novamente?"; then
+                     die "*** ROOT *** " "Cadastro de usuario cancelado"
+                     return 1
+                 fi
+                  sh_confadduser
+               fi
+					_FULLNAME="${AsUser[cfullname]}"
+					_USER="${AsUser[cuser]}"
+					_PASSWD_USER="${AsUser[cpass]}"
+					_PASSWD_ROOT="${AsUser[cpassroot]}"
+					_HOSTNAME="${AsUser[chostname]}"
+					sh_touchconf
                log_info_msg 'Configurações efetuadas. Prosseguindo com instalação.'
 					evaluate_retval "$?"
                ;;
