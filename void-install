@@ -699,7 +699,7 @@ sh_mount() {
 }
 
 sh_fluxboxminimal() {
-	local apkgs=(xorg-minimal xinit lxterminal fluxbox dejavu-fonts-ttf xterm pulseaudio vlc ristretto mupdf setxkbmap Thunar firefox firefox-i18n-pt-BR lxdm)
+	local apkgs=(xorg-minimal xinit lxterminal fluxbox fbmenugen dejavu-fonts-ttf xterm pulseaudio vlc ristretto mupdf setxkbmap Thunar firefox firefox-i18n-pt-BR lxdm)
 	sh_chroot_job "Instalando pacotes do fluxbox em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
 }
 
