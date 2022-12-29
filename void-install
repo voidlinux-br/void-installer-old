@@ -35,7 +35,7 @@
 
 #system
 APP="${0##*/}"
-_VERSION_='0.90.20221228'
+_VERSION_='0.95.20221228'
 readonly DEPENDENCIES=(tar wget sed cat grep chroot tput printf blkid fdisk mkfs.ext4 mkfs.ext2 mkfs.btrfs mkfs.xfs dialog sfdisk lsblk)
 declare -A AsUser
 declare -i quiet=0 grafico=0 auto=0
@@ -661,7 +661,7 @@ EOF
 }
 
 sh_mkservice() {
-	local aServices=('agetty-tty1' 'agetty-tty2' 'dhcpcd' 'wpa_supplicant' 'udevd' 'uuidd' 'dmeventd' 'sshd')
+	local aServices=('agetty-tty1' 'agetty-tty2' 'dhcpcd' 'wpa_supplicant' 'udevd' 'uuidd' 'dmeventd' 'sshd' 'lxdm')
 	local service
 
 	for service in "${aServices[@]}"
@@ -696,6 +696,107 @@ sh_mount() {
 	mkdir -p "$dir_install/boot"
 	mount "${_PART_BOOT}" "$dir_install/boot"
 	evaluate_retval "$?"
+}
+
+sh_fluxboxminimal() {
+	local apkgs=(xorg-minimal xinit lxterminal fluxbox dejavu-fonts-ttf xterm pulseaudio vlc ristretto mupdf setxkbmap Thunar firefox firefox-i18n-pt-BR lxdm)
+	sh_chroot_job "Instalando pacotes do fluxbox em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
+}
+
+sh_xorg(){
+	axorg=(xorg-server
+			xf86-video-vesa
+			xf86-video-intel
+			xf86-video-nouveau
+			xf86-video-openchrome
+			xf86-video-amdgpu
+			xf86-video-ati
+			xf86-video-fbdev
+			xf86-input-libinput
+			xterm
+			xinit
+			xauth
+			xorg-fonts
+		)
+}
+
+sh_basico(){
+	abasico=(dbus
+				dbus-x11
+				ConsoleKit2
+				setxkbmap
+				gvfs
+				gvfs-smb
+				gvfs-cdda
+		)
+}
+
+sh_fluxbox(){
+	afluxbox=(fluxbox
+			cairo
+	)
+}
+
+sh_appx11basico(){
+	appx11basico=(galculator-gtk2
+		adwaita-icon-theme
+		lxterminal
+		gtk2-engines
+		gtk-engine-murrine
+		lxappearance
+		wicd wicd-gtk
+		qt5ct
+		qt5-styleplugins
+		pcmanfm
+		leafpad
+		dconf
+		volumeicon
+		lxtask
+		feh
+		nitrogen
+		viewnior
+		xarchiver
+		unrar
+		zip
+		p7zip
+		unzip
+		bzip2
+	)
+}
+
+sh_browser(){
+	abrowser=(firefox firefox-i18n-pt-BR)
+}
+
+sh_media(){
+	amedia=(ffmpeg
+		gst-plugins-bad1
+		gst-plugins-good1
+		gst-plugins-ugly1
+		gst-plugins-base1
+		vlc
+		pulseaudio
+		pavucontrol-qt
+	)
+}
+
+sh_displaymanager(){
+	dm=(lxdm
+		sddm
+		lightdm
+		lightdm-gtk3-greeter
+	)
+}
+
+sh_perfumaria(){
+	aperfumaria=(compton
+		mate-notification-daemon
+		arc-theme
+		ffmpegthumbnailer
+		neofetch
+		fonts-droid-ttf
+		fonts-croscore-ttf
+	)
 }
 
 sh_install() {
@@ -744,8 +845,9 @@ sh_install() {
 		sh_set_keymap
 		sh_update_bashrc
 		sh_update_wpa_suplicant
-		sh_chroot_job "Certificando que todos pacotes estejam configurados corretamente em $_PART_ROOT:$dir_install" "xbps-reconfigure -fa"
+		sh_fluxboxminimal
 		sh_mkservice
+		sh_chroot_job "Certificando que todos pacotes estejam configurados corretamente em $_PART_ROOT:$dir_install" "xbps-reconfigure -fa"
 		sh_chroot_job "Removendo pacote bootstrap em $_PART_ROOT:$dir_install" "xbps-remove -y base-voidstrap" "$err_not_fatal"
 		quiet=$false
 		alerta "$ccabec" "Instalação finalizada com sucesso."
