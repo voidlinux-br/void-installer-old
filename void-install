@@ -1163,7 +1163,7 @@ sh_choosekeymap() {
 	if localectl > /dev/null 2>&1; then
 		items=$(localectl list-keymaps | sort -V)
 	else
-		items=$(find /usr/share/kbd/keymaps/ -type f -printf "%f\n" | sort -V)
+		items=$(find /usr/share/kbd/keymaps/ '*.gz' -type f -printf "%f\n" | sort -V)
 	fi
 	options=()
 
