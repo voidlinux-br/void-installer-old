@@ -69,6 +69,7 @@ sh_ambiente() {
 	readonly cwarning='** AVISO **'
 	readonly cmsg_dismount='Desmontar?'
 	readonly cmsg_all_mounted_part='O disco selecionado contém partições montadas'
+	readonly cmsgSetKeyboardLayout='Definir outro layout do teclado'
 	readonly buttonback='Finalizar'
    readonly buttonpart='Info disco'
 	readonly yeslabel='Sim'
@@ -380,6 +381,19 @@ conf() {
    return $?
 }
 
+conf2() {
+	xtitle="$1"
+	shift
+	${DIALOG}							\
+			--title     "$xtitle"	\
+			--backtitle "$ccabec"	\
+			--yes-label "$yeslabel"	\
+			--no-label  "$nolabel"	\
+			--yesno     "$*"			\
+			10 100
+			return $?
+}
+
 sh_testdisk(){
 	local result=0
 
@@ -482,9 +496,9 @@ sh_update_timezone() {
 	evaluate_retval "$?"
 }
 
-sh_set_keymap(){
+sh_set_keymap() {
 	msg "INFO" "$(log_info_msg "Ajustando teclado em $_PART_ROOT:$dir_install")"
-   [[ ! -e $dir_install/etc/vconsole.conf  ]] && >| $dir_install/etc/vconsole.conf
+	[[ ! -e $dir_install/etc/vconsole.conf  ]] && >| $dir_install/etc/vconsole.conf
 	if [[ -f $dir_install/etc/vconsole.conf ]]; then
 		echo "KEYMAP=$_KEYMAP" >> $dir_install/etc/vconsole.conf
 		sed -i -e "s|KEYMAP=.*|KEYMAP=$_KEYMAP|g" $dir_install/etc/vconsole.conf
@@ -699,8 +713,15 @@ sh_mount() {
 }
 
 sh_fluxboxminimal() {
-	local apkgs=(xorg-minimal xinit lxterminal fluxbox fbmenugen dejavu-fonts-ttf xterm pulseaudio vlc ristretto mupdf setxkbmap Thunar firefox firefox-i18n-pt-BR lxdm)
+	local apkgs=(xorg-minimal xinit lxterminal fluxbox fbmenugen dejavu-fonts-ttf xterm
+					 pulseaudio vlc ristretto mupdf setxkbmap Thunar firefox firefox-i18n-pt-BR lxdm)
+
 	sh_chroot_job "Instalando pacotes do fluxbox em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
+#	sh_chroot_job "Gerando menu customizado do fluxbox em $_PART_ROOT:$dir_install" "fbmenugen -i -o /home/${AsUser[cuser]}/.fluxbox/menu" "$err_not_fatal"
+	if [[ -f "$dir_install/home/${AsUser[cuser]}/.fluxbox/startup" ]]; then
+		sed -e "/xmodmap/s//# xmodmap/" -i "$dir_install/home/${AsUser[cuser]}/.fluxbox/startup" > /dev/null 2>&1
+ 		sed -e '/\# xmodmap/a setxkbmap br -variant abnt2' -i "$dir_install/home/${AsUser[cuser]}/.fluxbox/startup"
+	fi
 }
 
 sh_xorg(){
@@ -797,65 +818,6 @@ sh_perfumaria(){
 		fonts-droid-ttf
 		fonts-croscore-ttf
 	)
-}
-
-sh_install() {
-	local apkgs=(base-system xz lvm2 wireless_tools mkinitcpio mkinitcpio-udev nano grub efivar efibootmgr os-prober)
-
-	sh_umountfs
-	sh_checknet "$URL_GOOGLE" || return 1
-	sh_checktarball
-	sh_choosedisk
-	sh_choosefilesystem
-	sh_confadduser "$@"
-	if ! sh_mkparted; then die "Erro"; fi
-	if ! sh_mkfs 	 ; then die "Erro"; fi
-	sh_mount
-	sh_mkdir
-
-	msg "INFO" "$(log_info_msg "Instalando rootfs em $_PART_ROOT:$dir_install")"
-	if tar xpf "$_TARBALL_ROOTFS" --xattrs-include='*.*' --numeric-owner -C $dir_install > /dev/null 2>&1; then
-		evaluate_retval "$?"
-		sh_bind
-
-		msg "INFO" "$(log_info_msg "Ajustando /etc/resolv.conf em $_PART_ROOT:$dir_install")"
-		cp /etc/resolv.conf "$dir_install/etc/" > /dev/null 2>&1
-		evaluate_retval "$?"
-
-		sh_update_mirror
-		sh_chroot_job "Atualizando repositorio em $_PART_ROOT:$dir_install" "xbps-install -Suy xbps"
-		sh_chroot_job "Atualizando sistema em $_PART_ROOT:$dir_install" "xbps-install -uy"
-
-		for pkg in "${apkgs[@]}"
-		do
-			sh_chroot_job "Instalando $pkg em $_PART_ROOT:$dir_install" "xbps-install -y $pkg"
-		done
-
-		sh_chroot_job "Instalando pacotes adicionais em $_PART_ROOT:$dir_install" "xbps-install -y $_PKGS"
-		sh_chroot_job "Instalando GRUB i386-pc no $_DEVICE" "grub-install --target=i386-pc $_DEVICE --recheck"
-#		sh_chroot_job "Instalando GRUB EFI na partição: $dir_install/boot/efi" "grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=$cnickefi --recheck"
-		sh_chroot_job "Gerando grub.cfg em $_PART_ROOT:$dir_install" "grub-mkconfig -o /boot/grub/grub.cfg"
-		sh_update_hostname
-		sh_update_rc
-		sh_update_timezone
-		sh_chroot_job "Reconfigurando locales em $_PART_ROOT:$dir_install" "xbps-reconfigure -f glibc-locales"
-		sh_update_locale
-		sh_mkuser
-		sh_mkfstab
-		sh_set_keymap
-		sh_update_bashrc
-		sh_update_wpa_suplicant
-		sh_fluxboxminimal
-		sh_mkservice
-		sh_chroot_job "Certificando que todos pacotes estejam configurados corretamente em $_PART_ROOT:$dir_install" "xbps-reconfigure -fa"
-		sh_chroot_job "Removendo pacote bootstrap em $_PART_ROOT:$dir_install" "xbps-remove -y base-voidstrap" "$err_not_fatal"
-		quiet=$false
-		alerta "$ccabec" "Instalação finalizada com sucesso."
-	else
-		evaluate_retval "$?"
-		die "Erro tar #$?. Problemas para descompactar o tarball $_TARBALL_ROOTFS em $dir_install"
-	fi
-	sh_umountfs
 }
 
 sh_backup_partitions() {
@@ -1040,8 +1002,6 @@ sh_checkdisk() {
    return 0
 }
 
-
-
 display_result() {
 	local xbacktitle=$ccabec
 	if [[ "$3" != "" ]] ; then
@@ -1073,6 +1033,8 @@ sh_confadduser()
          "Hostname: "                             5 1 "${AsUser[chostname]}"           5 28 20 0 0 \
          "Disco destino: "                        6 1 "${_DEVICE}"                     6 28 20 0 2 \
          "Tam/Modelo: "                           7 1 "${SIZE_ORIGEM}/${MODEL_ORIGEM}" 7 28 20 0 2 \
+         "FileSystem: "                           8 1 "${mkfs}"                        8 28 20 0 2 \
+         "Teclado: "                              9 1 "${_KEYMAP}"                     9 28 20 0 2 \
          2>&1 1>&3)
          exit_status=$?
 
@@ -1209,6 +1171,121 @@ init() {
 		esac
 		shift
 	done
+}
+
+sh_choosegrub() {
+	local cefi='off'
+	local cbios='on'
+	local cextra
+
+	if sh_bootefi ; then
+		cefi='on'
+		cbios='off'
+		cextra="Detectado boot via EFI \n↓ é recomendável instalar ↓"
+	fi
+
+	mbr=$(${DIALOG} --radiolist "Instalacao do GRUB:\n\n$cextra"   \
+		0 0 0                                                       \
+		EFI     "Interface de Firmaware Extensivel" $cefi           \
+		BIOS    "Sistema Básico de Entrada e Saída" $cbios          \
+		2>&1 >/dev/tty )
+
+	exit_status=$?
+	case $exit_status in
+		"$D_ESC"|"$D_CANCEL")
+		return 1
+		;;
+	esac
+}
+
+sh_choosekeymap() {
+	if localectl > /dev/null 2>&1; then
+		items=$(localectl list-keymaps | sort -V)
+	else
+		items=$(find /usr/share/kbd/keymaps/ -type f -printf "%f\n" | sort -V)
+	fi
+	options=()
+
+	for item in ${items}; do
+		options+=("${item%%.*}" "")
+	done
+
+	keymap=$(${DIALOG}                        		\
+					--backtitle "${ccabec}"       		\
+					--title "definir layout do teclado"	\
+					--menu ""                     		\
+					0 0 0                         		\
+					"${options[@]}" 3>&1 1>&2 2>&3)
+
+	nchoice=$?
+	if ! (( nchoice )); then
+		#loadkeys "$keymap"
+		_KEYMAP "$keymap"
+	fi
+	return $nchoice
+}
+
+sh_install() {
+	local apkgs=(base-system xz lvm2 wireless_tools mkinitcpio mkinitcpio-udev nano grub efivar efibootmgr os-prober)
+
+	sh_umountfs
+	sh_checknet "$URL_GOOGLE" || return 1
+	sh_checktarball
+	sh_choosedisk
+	sh_choosefilesystem
+	if conf2 "*** KEYBOARD ***" "Current layout : $_KEYMAP" "\n\n$cmsgSetKeyboardLayout?"; then
+		sh_choosekeymap
+   fi
+	sh_confadduser "$@"
+
+	if ! sh_mkparted; then die "Erro"; fi
+	if ! sh_mkfs 	 ; then die "Erro"; fi
+	sh_mount
+	sh_mkdir
+
+	msg "INFO" "$(log_info_msg "Instalando rootfs em $_PART_ROOT:$dir_install")"
+	if tar xpf "$_TARBALL_ROOTFS" --xattrs-include='*.*' --numeric-owner -C $dir_install > /dev/null 2>&1; then
+		evaluate_retval "$?"
+		sh_bind
+
+		msg "INFO" "$(log_info_msg "Ajustando /etc/resolv.conf em $_PART_ROOT:$dir_install")"
+		cp /etc/resolv.conf "$dir_install/etc/" > /dev/null 2>&1
+		evaluate_retval "$?"
+
+		sh_update_mirror
+		sh_chroot_job "Atualizando repositorio em $_PART_ROOT:$dir_install" "xbps-install -Suy xbps"
+		sh_chroot_job "Atualizando sistema em $_PART_ROOT:$dir_install" "xbps-install -uy"
+
+		for pkg in "${apkgs[@]}"
+		do
+			sh_chroot_job "Instalando $pkg em $_PART_ROOT:$dir_install" "xbps-install -y $pkg"
+		done
+
+		sh_chroot_job "Instalando pacotes adicionais em $_PART_ROOT:$dir_install" "xbps-install -y $_PKGS"
+		sh_chroot_job "Instalando GRUB i386-pc no $_DEVICE" "grub-install --target=i386-pc $_DEVICE --recheck"
+#		sh_chroot_job "Instalando GRUB EFI na partição: $dir_install/boot/efi" "grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=$cnickefi --recheck"
+		sh_chroot_job "Gerando grub.cfg em $_PART_ROOT:$dir_install" "grub-mkconfig -o /boot/grub/grub.cfg"
+		sh_update_hostname
+		sh_update_rc
+		sh_update_timezone
+		sh_chroot_job "Reconfigurando locales em $_PART_ROOT:$dir_install" "xbps-reconfigure -f glibc-locales"
+		sh_update_locale
+		sh_mkuser
+		sh_mkfstab
+		sh_set_keymap
+		sh_update_bashrc
+		sh_update_wpa_suplicant
+		sh_fluxboxminimal
+		sh_mkservice
+		sh_chroot_job "Certificando que todos pacotes estejam configurados corretamente em $_PART_ROOT:$dir_install" "xbps-reconfigure -fa"
+		sh_chroot_job "Removendo pacote bootstrap em $_PART_ROOT:$dir_install" "xbps-remove -y base-voidstrap" "$err_not_fatal"
+		quiet=$false
+		alerta "$ccabec" "Instalação finalizada com sucesso."
+	else
+		evaluate_retval "$?"
+		die "Erro tar #$?. Problemas para descompactar o tarball $_TARBALL_ROOTFS em $dir_install"
+	fi
+	sh_umountfs
 }
 
 sh_ambiente
