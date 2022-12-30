@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#shellcheck disable=SC2145,SC2001,SC2188
+#shellcheck disable=SC2145,SC2001,SC2188,SC2015,SC2155,SC2317,SC2320
 
 #  void-install
 #  Created: 2022/12/24
@@ -38,14 +38,14 @@ APP="${0##*/}"
 _VERSION_='1.05.20221230'
 readonly DEPENDENCIES=(tar wget sed cat grep chroot tput printf blkid fdisk mkfs.ext4 mkfs.ext2 mkfs.btrfs mkfs.xfs dialog sfdisk lsblk)
 declare -A AsUser
-declare -i quiet=0 grafico=0 auto=0
-declare -i LAUTO=0 LINSTALL=0 LCHROOT=0
+declare -i quiet=0 grafico=0
+declare -i LAUTO=0 LINSTALL=0 LCHROOT=0 LBIND=0
 declare _DEVICE='/dev/loop11'
-declare _PART_BIOS="/dev/loop11p1"
-declare _PART_BOOT="/dev/loop11p2"
-declare _PART_ROOT="/dev/loop11p3"
-declare _FULLNAME=""
+declare _PART_BIOS="${_DEVICE}p1"
+declare _PART_BOOT="${_DEVICE}p2"
+declare _PART_ROOT="${_DEVICE}p3"
 declare _USER="void"
+declare _USER_FULLNAME=""
 declare _PASSWD_USER="void"
 declare _PASSWD_ROOT="voidlinux"
 declare _HOSTNAME="voidlinux"
@@ -56,7 +56,7 @@ sh_ambiente() {
 	readonly cnickefi='void'
 	readonly dir_install='/mnt/voidlinux'
 	readonly app_conf='void-install.conf'
-	readonly URL_GOOGLE='https://google.com'
+	readonly url_google='https://google.com'
 	readonly url_mirror='http://void.chililinux.com/voidlinux'
 	readonly cmsgusermanager="$APP v$_VERSION_ configuracao"
 	readonly ccreatenewuser='Configurações'
@@ -67,9 +67,9 @@ sh_ambiente() {
 	readonly cmsg_part_disk='Visualizar partições do disco'
 	readonly cmsgpart='Particionamento automatico'
 	readonly cwarning='** AVISO **'
-	readonly cmsg_dismount='Desmontar?'
 	readonly cmsg_all_mounted_part='O disco selecionado contém partições montadas'
 	readonly cmsgSetKeyboardLayout='Definir outro layout do teclado'
+	readonly cmsg_umount_partition='Aguarde, Desmontando particao de trabalho'
 	readonly buttonback='Finalizar'
    readonly buttonpart='Info disco'
 	readonly yeslabel='Sim'
@@ -81,6 +81,8 @@ sh_ambiente() {
 	readonly shell='/bin/sh'
 	readonly BOOTLOG="/tmp/void-install-$(sh_diahora).log"
 	: "${mkfs='EXT4'}"
+	: "${mbr='BIOS'}"
+	: "${dm='lxdm'}"
 	: "${ccabec="$APP v${_VERSION_}"}"
 	: "${DIALOG=${DIALOG:-"dialog"}}"
 	# flag dialog exit status codes
@@ -91,6 +93,11 @@ sh_ambiente() {
    : "${D_ITEM_HELP=4}"
    : "${D_ESC=255}"
 	: echo "$err_fatal"
+	: echo "$LAUTO"
+	: echo "$pink"
+	: echo "$cwarning"
+	: echo "$cmsgchgpasswd"
+	: echo "$cnickefi"
 
 	if [ -z "${COLUMNS}" ]; then
    	COLUMNS=$(stty size)
@@ -118,8 +125,8 @@ _PART_ROOT="$_PART_ROOT"
 #_TARBALL_ROOTFS='void-x86_64-base-minimal-current.tar.xz'
 #_TARBALL_ROOTFS='void-x86_64-base-voidstrap-current.tar.xz'
 _TARBALL_ROOTFS='void-x86_64-base-system-current.tar.xz'
-_FULLNAME="$_FULLNAME"
 _USER="$_USER"
+_USER_FULLNAME="$_USER_FULLNAME"
 _PASSWD_USER="$_PASSWD_USER"
 _PASSWD_ROOT="$_PASSWD_ROOT"
 _HOSTNAME="$_HOSTNAME"
@@ -149,8 +156,7 @@ sh_ascii_lines() {
 	fi
 }
 
-sh_checkroot()
-{
+sh_checkroot() {
 	if [ "$(id -u)" != "0" ]; then
 		die "${red} erro: você não pode realizar esta operação a menos que seja root."
 	fi
@@ -186,8 +192,7 @@ sh_checktarball() {
    return $?
 }
 
-checkDependencies()
-{
+sh_checkDependencies() {
 	local errorFound=0
 	declare -a missing
 
@@ -202,7 +207,7 @@ checkDependencies()
 	fi
 }
 
-setvarcolors() {
+sh_setvarcolors() {
    reset=$(tput sgr0);
 	green=$(tput setaf 2);
 	red=$(tput setaf 124);
@@ -211,13 +216,13 @@ setvarcolors() {
 	cyan=$(tput setaf 37);
 	orange=$(tput setaf 166);
    pink=$(tput setaf 129)
+   white=$(tput setaf 15);
   	#yellow=$(tput setaf 136);
-   #white=$(tput setaf 15);
    #violet=$(tput setaf 61);
 	#purple=$(tput setaf 125);
 }
 
-unsetvarcolors() {
+sh_unsetvarcolors() {
    reset=''
 	green=''
 	red=''
@@ -226,14 +231,14 @@ unsetvarcolors() {
 	cyan=''
 	orange=''
 	pink=''
+	white=''
 	#yellow=''
-	#white=''
 	#violet=''
    #purple=''
-	log_prefix
+	sh_logprefix
 }
 
-log_prefix() {
+sh_logprefix() {
    NORMAL="${reset}"   # Standard console grey
    SUCCESS="${green}"  # Success is green
    FAILURE="${red}"    # Failures are red
@@ -322,13 +327,11 @@ log_success_msg2() {
 }
 
 timespec() {
-#	STAMP="$(echo $(date +"%b %d %T %:z") $(hostname)) [$FUNCNAME][$LINENO]"
 	STAMP="$(date +"%b %d %T %:z") $(hostname))"
 	echo "$STAMP"
 	return 0
 }
 
-#     10 60
 msg() {
    if (( grafico )); then
       ${DIALOG}               \
@@ -484,7 +487,7 @@ EOF
 
 sh_update_hostname() {
 	msg "INFO" "$(log_info_msg "Ajustando hostname em $_PART_ROOT:$dir_install")"
-	echo "${_HOSTNAME}" > $dir_install/etc/hostname
+	echo "${_HOSTNAME}" > "$dir_install/etc/hostname"
 	evaluate_retval "$?"
 }
 
@@ -528,8 +531,8 @@ update_config=1
 fast_reauth=1
 
 network={
-   ssid="MINHA_REDE_WIFI"
-   psk="MINHA_SENHA"
+   ssid="REDE_WIFI"
+   psk="SENHA_WIFI"
    mesh_fwding=1
 }
 EOF
@@ -556,6 +559,7 @@ sh_mkfs() {
 sh_umountfs(){
 	msg "INFO" "$(log_info_msg "Desmontando sistema de arquivo em $_PART_ROOT:$dir_install")"
 	umount -frl "$dir_install" > /dev/null 2>&1
+	LBIND=$false
 	evaluate_retval "$?" "$err_not_fatal"
 }
 
@@ -564,6 +568,7 @@ sh_bind() {
 	mount -t proc  /proc "$dir_install/proc" > /dev/null 2>&1
 	mount -t sysfs /sys  "$dir_install/sys"  > /dev/null 2>&1
 	mount -o bind  /dev  "$dir_install/dev"  > /dev/null 2>&1
+	LBIND=$true
 	evaluate_retval "$?"
 }
 
@@ -652,7 +657,6 @@ sh_chroot_job() {
 sh_mkuser() {
 	if [[ -n "${AsUser[cuser]}" ]]; then
 		if [[ -n "${AsUser[cfullname]}" ]]; then
-#			sh_chroot_job "$cmsgadduser: ${AsUser[cuser]} - ${AsUser[cfullname]}" "useradd -m ${AsUser[cuser]} -G ${AsUser[cgroups]} -p ${AsUser[cpass]} -c "${AsUser[cfullname]}" > /dev/null 2>&1"
 			sh_chroot_job "$cmsgadduser: ${AsUser[cuser]} - ${AsUser[cfullname]}" "useradd -m ${AsUser[cuser]} -G ${AsUser[cgroups]} -p ${AsUser[cpass]} -c ""${AsUser[cfullname]}"" > /dev/null 2>&1"
 		else
 			sh_chroot_job "$cmsgadduser: ${AsUser[cuser]} - ${AsUser[cfullname]}" "useradd -m ${AsUser[cuser]} -G ${AsUser[cgroups]} -p ${AsUser[cpass]}"
@@ -731,102 +735,6 @@ sh_openboxminimal() {
 	sh_chroot_job "Instalando pacotes do openbox em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
 }
 
-sh_xorg(){
-	axorg=(xorg-server
-			xf86-video-vesa
-			xf86-video-intel
-			xf86-video-nouveau
-			xf86-video-openchrome
-			xf86-video-amdgpu
-			xf86-video-ati
-			xf86-video-fbdev
-			xf86-input-libinput
-			xterm
-			xinit
-			xauth
-			xorg-fonts
-		)
-}
-
-sh_basico(){
-	abasico=(dbus
-				dbus-x11
-				ConsoleKit2
-				setxkbmap
-				gvfs
-				gvfs-smb
-				gvfs-cdda
-		)
-}
-
-sh_fluxbox(){
-	afluxbox=(fluxbox
-			cairo
-	)
-}
-
-sh_appx11basico(){
-	appx11basico=(galculator-gtk2
-		adwaita-icon-theme
-		lxterminal
-		gtk2-engines
-		gtk-engine-murrine
-		lxappearance
-		wicd wicd-gtk
-		qt5ct
-		qt5-styleplugins
-		pcmanfm
-		leafpad
-		dconf
-		volumeicon
-		lxtask
-		feh
-		nitrogen
-		viewnior
-		xarchiver
-		unrar
-		zip
-		p7zip
-		unzip
-		bzip2
-	)
-}
-
-sh_browser(){
-	abrowser=(firefox firefox-i18n-pt-BR)
-}
-
-sh_media(){
-	amedia=(ffmpeg
-		gst-plugins-bad1
-		gst-plugins-good1
-		gst-plugins-ugly1
-		gst-plugins-base1
-		vlc
-		pulseaudio
-		pavucontrol-qt
-	)
-}
-
-sh_displaymanager(){
-	dm=(lxdm
-		sddm
-		lightdm
-		lightdm-gtk3-greeter
-	)
-}
-
-sh_perfumaria(){
-	aperfumaria=(compton
-		mate-notification-daemon
-		arc-theme
-		ffmpegthumbnailer
-		neofetch
-		fonts-droid-ttf
-		fonts-croscore-ttf
-	)
-}
-
 sh_backup_partitions() {
 	if [ $# -ge 2 ]; then
 		local disk="${1}"
@@ -859,7 +767,7 @@ now() {
 sh_setadduser()
 {
    # usuario/senha/hostmame/group
-   AsUser[cfullname]="$_FULLNAME"
+   AsUser[cfullname]="$_USER_FULLNAME"
    AsUser[cuser]="$_USER"
    AsUser[cpass]="$_PASSWD_USER"
    AsUser[cpassroot]="$_PASSWD_ROOT"
@@ -885,6 +793,42 @@ sh_disk_info() {
 	done < <(lsblk -PAo TYPE,NAME,PATH,SIZE,TRAN,MODEL,LABEL,SERIAL | grep -P 'TYPE="(disk|loop|lvm)"' | sort -k5,5 -k2,2)
 }
 
+sh_choosegrub() {
+	local cefi='off'
+	local cbios='on'
+	local cextra
+
+	if sh_bootefi ; then
+		cefi='on'
+		cbios='off'
+		cextra="Detectado boot via EFI \n↓ é recomendável instalar ↓"
+	else
+		cextra="EFI não detectado \n↓ é recomendável instalar BIOS ↓"
+	fi
+
+	mbr=$(${DIALOG} --radiolist "Instalacao do GRUB:\n\n$cextra"   \
+		0 0 0                                                       \
+		EFI     "Interface de Firmaware Extensivel" $cefi           \
+		BIOS    "Sistema Básico de Entrada e Saída" $cbios          \
+		2>&1 >/dev/tty )
+
+	exit_status=$?
+	case $exit_status in
+		"$D_ESC"|"$D_CANCEL")
+	       "$DIALOG" --clear --backtitle "$ccabec" --yesno "Deseja sair sem instalar?" 0 0
+	         case $? in
+	            "$D_OK")
+	               die "Instalação abortada..."
+	               ;;
+	            "$D_CANCEL")
+	               exit_status=99
+						sh_choosegrub
+	               ;;
+	         esac
+		;;
+	esac
+}
+
 sh_choosefilesystem() {
 	local cbtrfs='off'
 	local cxfs='off'
@@ -895,9 +839,9 @@ sh_choosefilesystem() {
 	cextra="↓ é recomendável EXT4 ↓"
 	mkfs=$(${DIALOG} --radiolist "Escolha o filesystem\n\n$cextra" \
 		0 0 0                                                       \
-		EXT4     "Rápido e maduro"                   $cext4         \
-		BTRFS    "Novos recursos, que são novidades" $cbtrfs        \
-		XFS      "Alto desempenho"                   $cxfs          \
+		EXT4     "Rápido e maduro"                   "$cext4"			\
+		BTRFS    "Novos recursos, que são novidades" "$cbtrfs"		\
+		XFS      "Alto desempenho"                   "$cxfs"			\
 		2>&1 >/dev/tty )
 
 	exit_status=$?
@@ -907,11 +851,10 @@ sh_choosefilesystem() {
 	         case $? in
 	            "$D_OK")
 	               die "Instalação abortada..."
-	               break
 	               ;;
 	            "$D_CANCEL")
 	               exit_status=99
-	               continue
+						sh_choosefilesystem
 	               ;;
 	         esac
 		;;
@@ -931,8 +874,8 @@ sh_choosedisk() {
 
 		for i in "${ARRAY_DSK_DEVICES[@]}"
 		do
-         array[((n++))]="$i"
-         array[((n++))]=$(printf "%-6s$sep%6s$sep%-30s" "${ARRAY_DSK_TRAN[$nc]}" "${ARRAY_DSK_SIZE[$nc]}" "${ARRAY_DSK_MODEL[$nc]}")
+			array[n++]="$i"
+         array[n++]=$(printf "%-6s$sep%6s$sep%-30s" "${ARRAY_DSK_TRAN[$nc]}" "${ARRAY_DSK_SIZE[$nc]}" "${ARRAY_DSK_MODEL[$nc]}")
 			((nc++))
 		done
 
@@ -1100,7 +1043,7 @@ sh_confadduser()
                  fi
                   sh_confadduser
                fi
-					_FULLNAME="${AsUser[cfullname]}"
+					_USER_FULLNAME="${AsUser[cfullname]}"
 					_USER="${AsUser[cuser]}"
 					_PASSWD_USER="${AsUser[cpass]}"
 					_PASSWD_ROOT="${AsUser[cpassroot]}"
@@ -1156,7 +1099,7 @@ init() {
 				exit $(($# ? 0 : 1))
 				;;
 			-n | --nocolor)
-				unsetvarcolors
+				sh_unsetvarcolors
 				;;
 			-q | --quiet)
 				quiet=1
@@ -1205,11 +1148,10 @@ sh_windowmanager() {
 			case $? in
 	      	"$D_OK")
 					die "Instalação abortada..."
-             	break
 	            ;;
 				"$D_CANCEL")
 					exit_status=99
-					continue
+					sh_windowmanager
 					;;
 			esac
 		;;
@@ -1238,7 +1180,7 @@ sh_choosekeymap() {
 	nchoice=$?
 	if ! (( nchoice )); then
 		#loadkeys "$keymap"
-		_KEYMAP "$keymap"
+		_KEYMAP="$keymap"
 	fi
 	return $nchoice
 }
@@ -1265,11 +1207,10 @@ sh_choosefilesystem() {
 	         case $? in
 	            "$D_OK")
 	               die "Instalação abortada..."
-	               break
 	               ;;
 	            "$D_CANCEL")
 	               exit_status=99
-	               continue
+						sh_choosefilesystem
 	               ;;
 	         esac
 		;;
@@ -1280,10 +1221,11 @@ sh_install() {
 	local apkgs=(base-system xz lvm2 wireless_tools mkinitcpio mkinitcpio-udev nano grub efivar efibootmgr os-prober)
 
 	sh_umountfs
-	sh_checknet "$URL_GOOGLE" || return 1
+	sh_checknet "$url_google" || return 1
 	sh_checktarball
 	sh_choosedisk
 	sh_choosefilesystem
+	sh_choosegrub
 	if conf2 "*** KEYBOARD ***" "Current layout : $_KEYMAP" "\n\n$cmsgSetKeyboardLayout?"; then
 		sh_choosekeymap
    fi
@@ -1298,7 +1240,8 @@ sh_install() {
 	msg "INFO" "$(log_info_msg "Instalando rootfs em $_PART_ROOT:$dir_install")"
 	if tar xpf "$_TARBALL_ROOTFS" --xattrs-include='*.*' --numeric-owner -C $dir_install > /dev/null 2>&1; then
 		evaluate_retval "$?"
-		sh_bind
+#		sh_bind
+		sh_initbind
 
 		msg "INFO" "$(log_info_msg "Ajustando /etc/resolv.conf em $_PART_ROOT:$dir_install")"
 		cp /etc/resolv.conf "$dir_install/etc/" > /dev/null 2>&1
@@ -1314,8 +1257,12 @@ sh_install() {
 		done
 
 		sh_chroot_job "Instalando pacotes adicionais em $_PART_ROOT:$dir_install" "xbps-install -y $_PKGS"
-		sh_chroot_job "Instalando GRUB i386-pc no $_DEVICE" "grub-install --target=i386-pc $_DEVICE --recheck"
-#		sh_chroot_job "Instalando GRUB EFI na partição: $dir_install/boot/efi" "grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=$cnickefi --recheck"
+
+		case "$wm" in
+			"BIOS") sh_chroot_job "Instalando GRUB i386-pc no $_DEVICE" "grub-install --target=i386-pc $_DEVICE --recheck" ;;
+		    "EFI") sh_chroot_job "Instalando GRUB EFI na partição: $dir_install/boot/efi" "grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=$cnickefi --recheck" ;;
+		esac
+
 		sh_chroot_job "Gerando grub.cfg em $_PART_ROOT:$dir_install" "grub-mkconfig -o /boot/grub/grub.cfg"
 		sh_update_hostname
 		sh_update_rc
@@ -1327,10 +1274,12 @@ sh_install() {
 		sh_set_keymap
 		sh_update_bashrc
 		sh_update_wpa_suplicant
+
 		case "$wm" in
 			"fluxbox")	sh_fluxboxminimal;;
 			"openbox")	sh_openboxminimal;;
 		esac
+
 		sh_mkservice
 		sh_chroot_job "Certificando que todos pacotes estejam configurados corretamente em $_PART_ROOT:$dir_install" "xbps-reconfigure -fa"
 		sh_chroot_job "Removendo pacote bootstrap em $_PART_ROOT:$dir_install" "xbps-remove -y base-voidstrap" "$err_not_fatal"
@@ -1343,13 +1292,11 @@ sh_install() {
 	sh_umountfs
 }
 
-
-
 sh_ambiente
 sh_ascii_lines
-setvarcolors
-log_prefix
-checkDependencies
+sh_setvarcolors
+sh_logprefix
+sh_checkDependencies
 sh_config
 
 [[ -z $1 ]] && {
