@@ -36,7 +36,7 @@
 #system
 APP="${0##*/}"
 _VERSION_='1.05.20221230'
-readonly DEPENDENCIES=(tar wget sed cat grep chroot tput printf blkid fdisk mkfs.ext4 mkfs.ext2 mkfs.btrfs mkfs.xfs dialog sfdisk lsblk)
+readonly DEPENDENCIES=(tar wget sed cat grep chroot tput printf blkid fdisk mkfs.ext4 mkfs.ext2 mkfs.btrfs mkfs.xfs dialog sfdisk lsblk parted)
 declare -A AsUser
 declare -i quiet=0 grafico=0
 declare -i LAUTO=0 LINSTALL=0 LCHROOT=0 LBIND=0
@@ -1061,7 +1061,8 @@ sh_confadduser()
 sh_dryrun() {
 	sh_umountfs
 	sh_mount
-	sh_bind
+#	sh_bind
+	sh_initbind
 	chroot "$dir_install" "$shell"
 	sh_umountfs
 }
@@ -1276,8 +1277,8 @@ sh_install() {
 		sh_update_wpa_suplicant
 
 		case "$wm" in
-			"fluxbox")	sh_fluxboxminimal;;
-			"openbox")	sh_openboxminimal;;
+			"fluxbox") sh_fluxboxminimal;;
+			"openbox") sh_openboxminimal;;
 		esac
 
 		sh_mkservice
@@ -1286,7 +1287,7 @@ sh_install() {
 		quiet=$false
 		alerta "$ccabec" "Instalação finalizada com sucesso."
 	else
-		evaluate_retval "$?"
+		evaluate_retval "$?" "$err_not_fatal"
 		die "Erro tar #$?. Problemas para descompactar o tarball $_TARBALL_ROOTFS em $dir_install"
 	fi
 	sh_umountfs
