@@ -35,7 +35,7 @@
 
 #system
 APP="${0##*/}"
-_VERSION_='1.46.20230102'
+_VERSION_='1.48.20230102'
 readonly DEPENDENCIES=(tar wget sed cat grep chroot tput printf blkid fdisk mkfs.ext2 mkfs.ext3 mkfs.ext4 mkfs.ext2 mkfs.btrfs mkfs.xfs mkfs.vfat dialog sfdisk lsblk parted)
 declare -A AsUser
 declare -i quiet=0 grafico=0
@@ -510,8 +510,8 @@ sh_update_timezone() {
 	msg "INFO" "$(log_info_msg "Ajustando locales em $_PART_ROOT:$dir_install")"
 	sed -e "/en_US.UTF-8 UTF-8/s/^\#//" -i "$dir_install/etc/default/libc-locales"
 	sed -e "/pt_BR.UTF-8 UTF-8/s/^\#//" -i "$dir_install/etc/default/libc-locales"
-	sh_chroot_job "Ajustando timezone em $_PART_ROOT:$dir_install" "ln -sf /usr/share/zoneinfo/${_TIMEZONE} /etc/localtime" "$err_not_fatal"
 	evaluate_retval "$?" "$err_not_fatal"
+	sh_chroot_job "Ajustando timezone em $_PART_ROOT:$dir_install" "ln -sf /usr/share/zoneinfo/${_TIMEZONE} /etc/localtime" "$err_not_fatal"
 }
 
 sh_set_keymap() {
@@ -680,7 +680,7 @@ sh_chroot_job() {
 sh_mkuser() {
 	if [[ -n "${AsUser[cuser]}" ]]; then
 		if [[ -n "${AsUser[cfullname]}" ]]; then
-			sh_chroot_job "$cmsgadduser: ${AsUser[cuser]} - ${AsUser[cfullname]}" "useradd -m ${AsUser[cuser]} -G ${AsUser[cgroups]} -p ${AsUser[cpass]} -c ""${AsUser[cfullname]}"" > /dev/null 2>&1"
+			sh_chroot_job "$cmsgadduser: ${AsUser[cuser]} - ${AsUser[cfullname]}" "useradd -m ${AsUser[cuser]} -G ${AsUser[cgroups]} -p ${AsUser[cpass]} -c '${AsUser[cfullname]}'"
 		else
 			sh_chroot_job "$cmsgadduser: ${AsUser[cuser]} - ${AsUser[cfullname]}" "useradd -m ${AsUser[cuser]} -G ${AsUser[cgroups]} -p ${AsUser[cpass]}"
 		fi
