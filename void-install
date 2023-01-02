@@ -3,7 +3,7 @@
 
 #  void-install
 #  Created: 2022/12/24
-#  Altered: 2022/12/31
+#  Altered: 2023/01/02
 #
 #  Copyright (c) 2022-2022, Vilmar Catafesta <vcatafesta@gmail.com>
 #                2022-2022, Felipe Nogueira <contato.fnog@gmail.com>
@@ -35,8 +35,8 @@
 
 #system
 APP="${0##*/}"
-_VERSION_='1.31.20221231'
-readonly DEPENDENCIES=(tar wget sed cat grep chroot tput printf blkid fdisk mkfs.ext4 mkfs.ext2 mkfs.btrfs mkfs.xfs mkfs.vfat dialog sfdisk lsblk parted)
+_VERSION_='1.43.20230102'
+readonly DEPENDENCIES=(tar wget sed cat grep chroot tput printf blkid fdisk mkfs.ext2 mkfs.ext3 mkfs.ext4 mkfs.ext2 mkfs.btrfs mkfs.xfs mkfs.vfat dialog sfdisk lsblk parted)
 declare -A AsUser
 declare -i quiet=0 grafico=0
 declare -i LAUTO=0 LINSTALL=0 LCHROOT=0 LBIND=0
@@ -83,7 +83,6 @@ sh_ambiente() {
 	: "${mkfs='EXT4'}"
 	: "${mbr='BIOS'}"
 	: "${dm='lxdm'}"
-	: "${xPARTEFI=""}"
 	: "${lEFI=$false}"
 	: "${ccabec="$APP v${_VERSION_}"}"
 	: "${DIALOG=${DIALOG:-"dialog"}}"
@@ -99,7 +98,6 @@ sh_ambiente() {
 	: echo "$pink"
 	: echo "$cwarning"
 	: echo "$cmsgchgpasswd"
-	: echo "$cnickefi"
 
 	if [ -z "${COLUMNS}" ]; then
    	COLUMNS=$(stty size)
@@ -447,14 +445,17 @@ sh_mkparted(){
 			nchoice=$true
 		fi
 	fi
+#			mkpart primary fat32      1MiB   200MiB set 1 bios on name 1 BIOS   \
+#			mkpart primary fat32      200MiB 500MiB set 2 esp  on name 2 EFI    \
+#			mkpart primary ext4       500MiB 100%               name 3 ROOT   \
 
 	if (( nchoice )); then
 		msg "INFO" "$(log_info_msg "Criando partições em ${_DEVICE}")"
 		parted --script "$_DEVICE" --                                   		\
 			mklabel gpt                                                       \
-			mkpart primary fat32      1MiB   200MiB set 1 bios on name 1 BIOS   \
-			mkpart primary fat32      200MiB 500MiB set 2 esp  on name 2 EFI    \
-			mkpart primary ext4       500MiB 100%               name 3 ROOT   \
+			mkpart primary fat32      1MiB 3MiB   set 1 bios on name 1 BIOS   \
+			mkpart primary fat32      3MiB 128MiB set 2 esp  on name 2 EFI    \
+			mkpart primary ext4       128MiB 100%               name 3 ROOT   \
 			align-check optimal 1
 		evaluate_retval "$?"
 		#parted --script "$_DEVICE" -- print
@@ -551,16 +552,20 @@ EOF
 }
 
 sh_mkfs() {
-	msg "INFO" "$(log_info_msg "Formatando partição BIOS: ${_PART_BIOS} FS ext2")"
-	mkfs.ext2 -F -L "EFI" "${_PART_BIOS}" > /dev/null 2>&1
-	evaluate_retval "$?"
+#	msg "INFO" "$(log_info_msg "Formatando partição BIOS: ${_PART_BIOS} FS ext2")"
+#	mkfs.ext2 -F -L "EFI" "${_PART_BIOS}" > /dev/null 2>&1
+#	evaluate_retval "$?"
 
 	msg "INFO" "$(log_info_msg "Formatando partição EFI: ${_PART_BOOT} FS vfat32")"
 	mkfs.vfat -n "EFI" -F32 "${_PART_BOOT}" > /dev/null 2>&1
 	evaluate_retval
 
 	msg "INFO" "$(log_info_msg "Formatando partição ROOT: ${_PART_ROOT} FS ${mkfs,,}")"
-   if [[ "$mkfs" == "EXT4" ]]; then
+   if [[ "$mkfs" == "EXT2" ]]; then
+		mkfs.ext2 -F -L "VOID" "${_PART_ROOT}" > /dev/null 2>&1
+   elif [[ "$mkfs" == "EXT3" ]]; then
+		mkfs.ext3 -F -L "VOID" "${_PART_ROOT}" > /dev/null 2>&1
+   elif [[ "$mkfs" == "EXT4" ]]; then
 		mkfs.ext4 -F -L "VOID" "${_PART_ROOT}" > /dev/null 2>&1
    elif [[ "$mkfs" == "BTRFS" ]]; then
 		mkfs.btrfs -f -L "VOID" "${_PART_ROOT}" > /dev/null 2>&1
@@ -686,7 +691,7 @@ sh_mkuser() {
 sh_mkfstab() {
 	msg "INFO" "$(log_info_msg "Criando fstab em $_PART_ROOT:$dir_install")"
 cat > "$dir_install/etc/fstab" <<- EOF
-UUID=$(blkid -o value -s UUID "${_PART_BIOS}") /boot		ext2 defaults 0 2
+#UUID=$(blkid -o value -s UUID "${_PART_BIOS}") /boot		ext2 defaults 0 2
 UUID=$(blkid -o value -s UUID "${_PART_BOOT}") /boot/efi	vfat defaults,noatime 0 2
 UUID=$(blkid -o value -s UUID "${_PART_ROOT}") / 			${mkfs,,} defaults 0 1
 EOF
@@ -726,11 +731,6 @@ sh_mountfs() {
 	msg "INFO" "$(log_info_msg "Montando sistema de arquivos ROOT em $_PART_ROOT:$dir_install")"
 	mkdir -p "$dir_install"
 	mount "${_PART_ROOT}" "$dir_install"
-	evaluate_retval "$?"
-
-	msg "INFO" "$(log_info_msg "Montando sistema de arquivos BOOT em $_PART_ROOT:$dir_install/boot")"
-	mkdir -p "$dir_install/boot"
-	mount "${_PART_BIOS}" "$dir_install/boot"
 	evaluate_retval "$?"
 
 	msg "INFO" "$(log_info_msg "Montando sistema de arquivos EFI em $_PART_ROOT:$dir_install/boot/efi")"
@@ -861,18 +861,19 @@ sh_choosegrub() {
 }
 
 sh_choosefilesystem() {
-	local cbtrfs='off'
-	local cxfs='off'
-	local cext4='on'
+	local coff='off'
+	local con='on'
 	local cextra
 	local exit_status
 
 	cextra="↓ é recomendável EXT4 ↓"
 	mkfs=$(${DIALOG} --radiolist "Escolha o filesystem\n\n$cextra" \
 		0 0 0                                                       \
-		EXT4     "Rápido e maduro"                   "$cext4"			\
-		BTRFS    "Novos recursos, que são novidades" "$cbtrfs"		\
-		XFS      "Alto desempenho"                   "$cxfs"			\
+		EXT2     "Linux Ext2 (sem journal)"						"off"	\
+		EXT3     "Linux Ext3 (journal)"							"off"	\
+		EXT4     "Linux Ext4 - Rápido e maduro (journal)"	"on"	\
+		BTRFS    "Oracle Btrfs - Novos recursos - imaturo"	"off"	\
+		XFS      "SGI's Xfs - Alto desempenho"					"off"	\
 		2>&1 >/dev/tty )
 
 	exit_status=$?
@@ -1094,7 +1095,6 @@ sh_confadduser()
 sh_dryrun() {
 	sh_umountfs
 	sh_mountfs
-#	sh_bind
 	sh_initbind
 	chroot "$dir_install" "$shell"
 	sh_umountfs
@@ -1158,13 +1158,21 @@ init() {
 	done
 }
 
+sh_mkefiroaming() {
+	# Caminho de inicialização padrão/reserva
+	msg "INFO" "$(log_info_msg "Criando diretorio: $dir_install/boot/efi/EFI/BOOT")"
+	mkdir -p "$dir_install/boot/efi/EFI/BOOT" > /dev/null 2>&1
+	evaluate_retval "$?" "$err_not_fatal"
+
+	msg "INFO" "$(log_info_msg "Copiando caminho de inicialização padrão/reserva para: $dir_install/boot/efi/BOOT")"
+	cp "$dir_install/boot/efi/EFI/$cnickefi/grubx64.efi" "$dir_install/boot/efi/EFI/BOOT/BOOTX64.EFI" 2> /dev/null
+	evaluate_retval "$?" "$err_not_fatal"
+}
+
 sh_bootefi() {
 	lEFI=$false
 	if efivar --list > /dev/null 2>&1; then
-		xPARTEFI=$(fdisk "$_DEVICE" -l | grep EFI | cut -d' ' -f1)
-		if [[ -n "$xPARTEFI" ]] ; then
-			lEFI=$true
-		fi
+		lEFI=$true
    fi
 	[[ $lEFI -eq $true ]] && return 0 || return 1
 }
@@ -1226,44 +1234,10 @@ sh_choosekeymap() {
 	return $nchoice
 }
 
-sh_choosefilesystem() {
-	local cbtrfs='off'
-	local cxfs='off'
-	local cext4='on'
-	local cextra
-	local exit_status
-
-	cextra="↓ é recomendável EXT4 ↓"
-	mkfs=$(${DIALOG} --radiolist "Escolha o filesystem\n\n$cextra" \
-		0 0 0                                                       \
-		EXT4     "Rápido e maduro"                   $cext4         \
-		BTRFS    "Novos recursos, que são novidades" $cbtrfs        \
-		XFS      "Alto desempenho"                   $cxfs          \
-		2>&1 >/dev/tty )
-
-	exit_status=$?
-	case $exit_status in
-		"$D_ESC"|"$D_CANCEL")
-	       "$DIALOG" --clear --backtitle "$ccabec" --yesno "Deseja sair sem instalar?" 0 0
-	         case $? in
-	            "$D_OK")
-	               die "Instalação abortada..."
-	               ;;
-	            "$D_CANCEL")
-	               exit_status=99
-						sh_choosefilesystem
-	               ;;
-	         esac
-		;;
-	esac
-}
-
 sh_install() {
 	local apkgs=(base-system xz lvm2 wireless_tools mkinitcpio mkinitcpio-udev nano grub grub-x86_64-efi efivar efibootmgr os-prober)
 
 	sh_umountfs
-	sh_checknet "$url_google" || return 1
-	sh_checktarball
 	sh_choosedisk
 	sh_choosefilesystem
 	sh_choosegrub
@@ -1275,13 +1249,14 @@ sh_install() {
 
 	if ! sh_mkparted; then die "Erro"; fi
 	if ! sh_mkfs 	 ; then die "Erro"; fi
+	sh_checknet "$url_google" || return 1
+	sh_checktarball
 	sh_mountfs
 	sh_mkdir
 
 	msg "INFO" "$(log_info_msg "Instalando rootfs em $_PART_ROOT:$dir_install")"
 	if tar xpf "$_TARBALL_ROOTFS" --xattrs-include='*.*' --numeric-owner -C $dir_install > /dev/null 2>&1; then
 		evaluate_retval "$?"
-#		sh_bind
 		sh_initbind
 
 		msg "INFO" "$(log_info_msg "Ajustando /etc/resolv.conf em $_PART_ROOT:$dir_install")"
@@ -1300,10 +1275,12 @@ sh_install() {
 		sh_chroot_job "Instalando pacotes adicionais em $_PART_ROOT:$dir_install" "xbps-install -y $_PKGS"
 
 		case "$mbr" in
-			"BIOS") sh_chroot_job "Instalando GRUB i386-pc em $_PART_BIOS" "grub-install --target=i386-pc $_DEVICE --recheck" ;;
-		    "EFI") sh_chroot_job "Instalando GRUB EFI em $_PART_BOOT" "grub-install --target=x86_64-efi --efi-directory=/boot/efi --boot-directory=/boot --bootloader-id=$cnickefi --recheck" ;;
+			"BIOS") 	sh_chroot_job "Instalando GRUB i386-pc em $_PART_BIOS" "grub-install --target=i386-pc $_DEVICE --recheck"
+						;;
+		    "EFI") 	sh_chroot_job "Instalando GRUB EFI em $_PART_BOOT" "grub-install --target=x86_64-efi --efi-directory=/boot/efi --boot-directory=/boot --bootloader-id=$cnickefi --recheck"
+						sh_mkefiroaming
+						;;
 		esac
-
 		sh_chroot_job "Gerando grub.cfg em $_PART_ROOT:$dir_install" "grub-mkconfig -o /boot/grub/grub.cfg"
 		sh_update_hostname
 		sh_update_rc
