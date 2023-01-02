@@ -35,7 +35,7 @@
 
 #system
 APP="${0##*/}"
-_VERSION_='1.44.20230102'
+_VERSION_='1.46.20230102'
 readonly DEPENDENCIES=(tar wget sed cat grep chroot tput printf blkid fdisk mkfs.ext2 mkfs.ext3 mkfs.ext4 mkfs.ext2 mkfs.btrfs mkfs.xfs mkfs.vfat dialog sfdisk lsblk parted)
 declare -A AsUser
 declare -i quiet=0 grafico=0
@@ -49,6 +49,10 @@ declare _USER_FULLNAME=""
 declare _PASSWD_USER="void"
 declare _PASSWD_ROOT="voidlinux"
 declare _HOSTNAME="voidlinux"
+declare _TIMEZONE="America/Sao_Paulo"
+declare _KEYMAP="br-abnt2"
+declare _CLOCK="UTC"
+declare _PKGS="vim neofetch pfetch openssh zstd curl lynx dialog"
 
 sh_ambiente() {
 	#export LC_ALL=C
@@ -130,10 +134,10 @@ _USER_FULLNAME="$_USER_FULLNAME"
 _PASSWD_USER="$_PASSWD_USER"
 _PASSWD_ROOT="$_PASSWD_ROOT"
 _HOSTNAME="$_HOSTNAME"
-_TIMEZONE="America/Porto_Velho"
-_KEYMAP="br-abnt2"
-_CLOCK="UTC"
-_PKGS="vim neofetch pfetch openssh grub-x86_64-efi"
+_TIMEZONE="$_TIMEZONE"
+_KEYMAP="$_KEYMAP"
+_CLOCK="$_CLOCK"
+_PKGS="$_PKGS"
 #end
 EOF
 }
@@ -503,11 +507,11 @@ sh_update_hostname() {
 }
 
 sh_update_timezone() {
-	msg "INFO" "$(log_info_msg "Ajustando timezone em $_PART_ROOT:$dir_install")"
+	msg "INFO" "$(log_info_msg "Ajustando locales em $_PART_ROOT:$dir_install")"
 	sed -e "/en_US.UTF-8 UTF-8/s/^\#//" -i "$dir_install/etc/default/libc-locales"
 	sed -e "/pt_BR.UTF-8 UTF-8/s/^\#//" -i "$dir_install/etc/default/libc-locales"
-	ln -sf "$dir_install/usr/share/zoneinfo/${_TIMEZONE}" "$dir_install/etc/localtime"
-	evaluate_retval "$?"
+	sh_chroot_job "Ajustando timezone em $_PART_ROOT:$dir_install" "ln -sf /usr/share/zoneinfo/${_TIMEZONE} /etc/localtime" "$err_not_fatal"
+	evaluate_retval "$?" "$err_not_fatal"
 }
 
 sh_set_keymap() {
@@ -752,9 +756,10 @@ sh_fluxboxminimal() {
 }
 
 sh_openboxminimal() {
-	local apkgs=(xorg-minimal xinit lxterminal openbox dejavu-fonts-ttf xterm rxvt-unicode xfce4-terminal
-					 pulseaudio vlc ristretto mupdf setxkbmap Thunar pcmanfm firefox firefox-i18n-pt-BR lxdm)
-
+	local apkgs=(	xorg-minimal xinit openbox lxterminal dejavu-fonts-ttf xterm rxvt-unicode xfce4-terminal
+					 	pulseaudio vlc ristretto mupdf setxkbmap Thunar pcmanfm firefox firefox-i18n-pt-BR lxdm
+					 	obconf
+					)
 	sh_chroot_job "Instalando pacotes do openbox em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
 }
 
