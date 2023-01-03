@@ -3,7 +3,7 @@
 
 #  void-install
 #  Created: 2022/12/24
-#  Altered: 2023/01/02
+#  Altered: 2023/01/03
 #
 #  Copyright (c) 2022-2022, Vilmar Catafesta <vcatafesta@gmail.com>
 #                2022-2022, Felipe Nogueira <contato.fnog@gmail.com>
@@ -35,7 +35,7 @@
 
 #system
 APP="${0##*/}"
-_VERSION_='1.48.20230102'
+_VERSION_='1.55.20230103'
 readonly DEPENDENCIES=(tar wget sed cat grep chroot tput printf blkid fdisk mkfs.ext2 mkfs.ext3 mkfs.ext4 mkfs.ext2 mkfs.btrfs mkfs.xfs mkfs.vfat dialog sfdisk lsblk parted)
 declare -A AsUser
 declare -i quiet=0 grafico=0
@@ -53,6 +53,7 @@ declare _TIMEZONE="America/Sao_Paulo"
 declare _KEYMAP="br-abnt2"
 declare _CLOCK="UTC"
 declare _PKGS="vim neofetch pfetch openssh zstd curl lynx dialog"
+
 
 sh_ambiente() {
 	#export LC_ALL=C
@@ -84,6 +85,9 @@ sh_ambiente() {
 	readonly err_not_fatal=0
 	readonly shell='/bin/sh'
 	readonly BOOTLOG="/tmp/void-install-$(sh_diahora).log"
+	readonly LOGGER=/dev/tty8
+	readonly	CONF_FILE=/tmp/.void-install.conf
+	readonly ANSWER=$(mktemp -t void-install-XXXXXXXX || exit 1)
 	: "${mkfs='EXT4'}"
 	: "${mbr='BIOS'}"
 	: "${dm='lxdm'}"
@@ -94,9 +98,26 @@ sh_ambiente() {
    : "${D_OK=0}"
    : "${D_CANCEL=1}"
    : "${D_HELP=2}"
-   : "${D_EXTRA=3}"
+   : "${D_EXTRA=3}"x
    : "${D_ITEM_HELP=4}"
    : "${D_ESC=255}"
+
+	# dialog colors
+	BLACK="\Z0"
+	RED="\Z1"
+	GREEN="\Z2"
+	YELLOW="\Z3"
+	BLUE="\Z4"
+	MAGENTA="\Z5"
+	CYAN="\Z6"
+	WHITE="\Z7"
+	BOLD="\Zb"
+	REVERSE="\Zr"
+	UNDERLINE="\Zu"
+	RESET="\Zn"
+	MENULABEL="${BOLD}Use UP and DOWN keys to navigate \
+	menus. Use TAB to switch between buttons and ENTER to select.${RESET}"
+
 	: echo "$err_fatal"
 	: echo "$LAUTO"
 	: echo "$pink"
@@ -148,6 +169,9 @@ sh_config() {
 	if 	[[ -f "$app_conf" ]]
 	then 	source "$app_conf"
 	else  die "ERRO: falha na abertura de $app_conf!"
+	fi
+	if [ ! -f $CONF_FILE ]; then
+   	touch -f $CONF_FILE
 	fi
 	sh_setadduser
 }
@@ -671,13 +695,16 @@ sh_chroot_job() {
 	local lretval=0
 
 	msg "INFO" "$(log_info_msg "$cmsg")"
-	chroot "$dir_install" "$shell" -c "$cjob" > /dev/null 2>&1
+#	chroot "$dir_install" "$shell" -c "$cjob" > /dev/null 2>&1
+	chroot "$dir_install" "$shell" -c "$cjob" >$BOOTLOG 2>&1
 	lretval="$?"
 	evaluate_retval "$lretval" "$erro_fatal"
 	return "$lretval"
 }
 
 sh_mkuser() {
+	local user="${AsUser[cuser]}"
+
 	if [[ -n "${AsUser[cuser]}" ]]; then
 		if [[ -n "${AsUser[cfullname]}" ]]; then
 			sh_chroot_job "$cmsgadduser: ${AsUser[cuser]} - ${AsUser[cfullname]}" "useradd -m ${AsUser[cuser]} -G ${AsUser[cgroups]} -p ${AsUser[cpass]} -c '${AsUser[cfullname]}'"
@@ -690,6 +717,14 @@ sh_mkuser() {
    if [[ -n "${AsUser[cpassroot]}" ]]; then
 		sh_chroot_job "Ajustando senha usuario : root" "(echo root:${AsUser[cpassroot]}) | chpasswd -m > /dev/null 2>&1"
    fi
+
+	if [ -d $dir_install/etc/sudoers.d ]; then
+		echo "# Enable sudo for login '$user'" > "$dir_install/etc/sudoers.d/$user"
+		echo "$user ALL=(ALL:ALL) NOPASSWD: ALL" >> "$dir_install/etc/sudoers.d/$user"
+		echo "# enable the sudoers entry for members of group wheel" >"$dir_install/etc/sudoers.d/wheel"
+		echo "%wheel ALL=(ALL:ALL) NOPASSWD: ALL" >> "$dir_install/etc/sudoers.d/wheel"
+		unset user
+	fi
 }
 
 sh_mkfstab() {
@@ -703,7 +738,7 @@ EOF
 }
 
 sh_mkservice() {
-	local aServices=('agetty-tty1' 'agetty-tty2' 'dhcpcd' 'wpa_supplicant' 'udevd' 'uuidd' 'dmeventd' 'sshd' 'lxdm')
+	local aServices=('agetty-tty1' 'agetty-tty2' 'dhcpcd' 'wpa_supplicant' 'udevd' 'uuidd' 'dmeventd' 'sshd' 'lxdm' 'dbus')
 	local service
 
 	for service in "${aServices[@]}"
@@ -763,6 +798,20 @@ sh_openboxminimal() {
 	sh_chroot_job "Instalando pacotes do openbox em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
 }
 
+sh_plasma_desktopminimal() {
+	local apkgs=(	xorg-minimal plasma-desktop xterm lxdm lxterminal xfce4-terminal
+						pulseaudio vlc ristretto mupdf setxkbmap firefox firefox-i18n-pt-BR
+					)
+	sh_chroot_job "Instalando pacotes do plasma-desktop em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
+}
+
+sh_xfce4minimal() {
+	local apkgs=( xorg-minimal xfce4 xterm lxdm lxterminal xfce4-terminal
+						pulseaudio vlc ristretto mupdf setxkbmap firefox firefox-i18n-pt-BR
+					)
+	sh_chroot_job "Instalando pacotes do xfce4 em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
+}
+
 sh_backup_partitions() {
 	if [ $# -ge 2 ]; then
 		local disk="${1}"
@@ -800,7 +849,7 @@ sh_setadduser()
    AsUser[cpass]="$_PASSWD_USER"
    AsUser[cpassroot]="$_PASSWD_ROOT"
    AsUser[chostname]="$_HOSTNAME"
-   AsUser[cgroups]="audio,video,wheel,xbuilder"
+   AsUser[cgroups]="wheel,audio,video,floppy,cdrom,optical,kvm,xbuilder"
 }
 
 sh_disk_info() {
@@ -1183,16 +1232,15 @@ sh_bootefi() {
 }
 
 sh_windowmanager() {
-	local ctty='on'
-	local cfluxbox='off'
-	local copenbox='off'
 	local cextra
 
 	wm=$(${DIALOG} --radiolist "Gerenciador de janelas:\n\n$cextra"	\
 		0 0 0																				\
-		tty     	"Somente terminal, sem interface gráfica"	$ctty			\
-		fluxbox	"Fluxbox"											$cfluxbox	\
-		openbox	"Openbox" 											$copenbox	\
+		tty     			"Somente terminal, sem interface gráfica"	"on"	\
+		fluxbox			"Fluxbox"											"off"	\
+		openbox			"Openbox" 											"off"	\
+		plasma-desktop	"Kde Plasma-Desktop"								"off"	\
+		xfce4				"Xfce4"												"off"	\
 		2>&1 >/dev/tty )
 
 	exit_status=$?
@@ -1210,6 +1258,10 @@ sh_windowmanager() {
 			esac
 		;;
 	esac
+}
+
+sh_chowntmp() {
+	sh_chroot_job "Ajustando permissões de /tmp e /var/tmp em $_PART_ROOT:$dir_install" "chmod 1777 /tmp; chmod 1777 /var/tmp" "$err_not_fatal"
 }
 
 sh_choosekeymap() {
@@ -1240,7 +1292,7 @@ sh_choosekeymap() {
 }
 
 sh_install() {
-	local apkgs=(base-system xz lvm2 wireless_tools mkinitcpio mkinitcpio-udev nano grub grub-x86_64-efi efivar efibootmgr os-prober)
+	local apkgs=(base-system dbus xz lvm2 wireless_tools mkinitcpio mkinitcpio-udev nano grub grub-x86_64-efi efivar efibootmgr os-prober)
 
 	sh_umountfs
 	sh_choosedisk
@@ -1302,11 +1354,14 @@ sh_install() {
 		case "$wm" in
 			"fluxbox") sh_fluxboxminimal;;
 			"openbox") sh_openboxminimal;;
+			"plasma-desktop")	sh_plasma_desktopminimal;;
+			"xfce4")				sh_xfce4minimal;;
 		esac
 
 		sh_mkservice
 		sh_chroot_job "Certificando que todos pacotes estejam configurados corretamente em $_PART_ROOT:$dir_install" "xbps-reconfigure -fa"
 		sh_chroot_job "Removendo pacote bootstrap em $_PART_ROOT:$dir_install" "xbps-remove -y base-voidstrap" "$err_not_fatal"
+		sh_chowntmp
 		quiet=$false
 		alerta "$ccabec" "Instalação finalizada com sucesso."
 	else
@@ -1316,12 +1371,70 @@ sh_install() {
 	sh_umountfs
 }
 
+set_option() {
+    if grep -Eq "^${1}.*" $CONF_FILE; then
+        sed -i -e "/^${1}.*/d" $CONF_FILE
+    fi
+    echo "${1} ${2}" >>$CONF_FILE
+}
+
+get_option() {
+    echo $(grep -E "^${1}.*" $CONF_FILE|sed -e "s|${1}||")
+}
+
+menu_timezone() {
+    local areas=(Africa America Antarctica Arctic Asia Atlantic Australia Europe Indian Pacific)
+    local area locations location
+
+    while (IFS='|'; ${DIALOG} ${area:+--default-item|"$area"} --colors --title " Select area " --menu "$MENULABEL" 19 51 19 $(printf '%s||' "${areas[@]}")); do
+        area=$(cat $ANSWER)
+        read -a locations -d '\n' < <(find /usr/share/zoneinfo/$area -type f -printf '%P\n' | sort)
+        if (IFS='|'; ${DIALOG} --title " Select location (${area}) " --colors --menu "$MENULABEL" 19 51 19 $(printf '%s||' "${locations[@]//_/ }")); then
+            location=$(tr ' ' '_' < $ANSWER)
+            set_option TIMEZONE "$area/$location"
+            TIMEZONE_DONE=1
+            return 0
+        else
+            continue
+        fi
+    done
+    return 1
+}
+
+sh_chooselocales() {
+	local cod nat codnatdefault
+
+   codnatdefault=$(localectl status | grep LANG| cut -d= -f2)
+   paises=()
+   paises+=("BR" "Brasil" )
+   while read line; do
+      cod=`echo $line | awk '{print $1}'`
+      nat=`echo $line | awk '{print $2, $3, $4, $5}'`
+      if [ "$cod" = "$codnatdefault" ]; then
+         paises+=("^$cod" "$nat")
+      else
+         paises+=("$cod" "$nat")
+      fi
+   done < <(grep -v "#" /usr/share/zoneinfo/iso3166.tab)
+
+   locale=$(${DIALOG}                                                             \
+               --backtitle    "$ccabec - Configuração disco destino"             \
+               --title        "$cdisco"                                          \
+               --cancel-label "$buttonback"                                      \
+               --colors                                                          \
+               --extra-button                                                    \
+               --extra-label  "$buttonpart"                                      \
+               --menu         "\n$cchoosedisk" 0 0 10 "${paises[@]}" 2>&1 >/dev/tty  )
+}
+
 sh_ambiente
 sh_ascii_lines
 sh_setvarcolors
 sh_logprefix
 sh_checkDependencies
 sh_config
+#menu_timezone
+#exit
 
 [[ -z $1 ]] && {
    sh_usage
