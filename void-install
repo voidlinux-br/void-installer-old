@@ -1260,10 +1260,6 @@ sh_windowmanager() {
 	esac
 }
 
-sh_chowntmp() {
-	sh_chroot_job "Ajustando permissões de /tmp e /var/tmp em $_PART_ROOT:$dir_install" "chmod 1777 /tmp; chmod 1777 /var/tmp" "$err_not_fatal"
-}
-
 sh_choosekeymap() {
 	if localectl > /dev/null 2>&1; then
 		items=$(localectl list-keymaps | sort -V)
@@ -1289,6 +1285,71 @@ sh_choosekeymap() {
 		_KEYMAP="$keymap"
 	fi
 	return $nchoice
+}
+
+set_option() {
+    if grep -Eq "^${1}.*" $CONF_FILE; then
+        sed -i -e "/^${1}.*/d" $CONF_FILE
+    fi
+    echo "${1} ${2}" >>$CONF_FILE
+}
+
+get_option() {
+    echo $(grep -E "^${1}.*" $CONF_FILE|sed -e "s|${1}||")
+}
+
+menu_timezone() {
+    local areas=(Africa America Antarctica Arctic Asia Atlantic Australia Europe Indian Pacific)
+    local area locations location
+
+    while (IFS='|'; ${DIALOG} ${area:+--default-item|"$area"} --colors --title " Select area " --menu "$MENULABEL" 19 51 19 $(printf '%s||' "${areas[@]}")); do
+        area=$(cat $ANSWER)
+        read -a locations -d '\n' < <(find /usr/share/zoneinfo/$area -type f -printf '%P\n' | sort)
+        if (IFS='|'; ${DIALOG} --title " Select location (${area}) " --colors --menu "$MENULABEL" 19 51 19 $(printf '%s||' "${locations[@]//_/ }")); then
+            location=$(tr ' ' '_' < $ANSWER)
+            set_option TIMEZONE "$area/$location"
+            TIMEZONE_DONE=1
+            return 0
+        else
+            continue
+        fi
+    done
+    return 1
+}
+
+sh_chooselocales() {
+	local cod nat codnatdefault
+
+   codnatdefault=$(localectl status | grep LANG| cut -d= -f2)
+   paises=()
+   paises+=("BR" "Brasil" )
+   while read line; do
+      cod=`echo $line | awk '{print $1}'`
+      nat=`echo $line | awk '{print $2, $3, $4, $5}'`
+      if [ "$cod" = "$codnatdefault" ]; then
+         paises+=("^$cod" "$nat")
+      else
+         paises+=("$cod" "$nat")
+      fi
+   done < <(grep -v "#" /usr/share/zoneinfo/iso3166.tab)
+
+   locale=$(${DIALOG}                                                             \
+               --backtitle    "$ccabec - Configuração disco destino"             \
+               --title        "$cdisco"                                          \
+               --cancel-label "$buttonback"                                      \
+               --colors                                                          \
+               --extra-button                                                    \
+               --extra-label  "$buttonpart"                                      \
+               --menu         "\n$cchoosedisk" 0 0 10 "${paises[@]}" 2>&1 >/dev/tty  )
+}
+
+sh_chmodtmp() {
+	msg "INFO" "$(log_info_msg "Ajustando permissões em $_PART_ROOT:$dir_install/tmp")"
+	chmod 1777 "$dir_install/tmp"
+	evaluate_retval "$?" "$err_not_fatal"
+	msg "INFO" "$(log_info_msg "Ajustando permissões em $_PART_ROOT:$dir_install/var/tmp")"
+	chmod 1777 "$dir_install/var/tmp"
+	evaluate_retval "$?" "$err_not_fatal"
 }
 
 sh_install() {
@@ -1361,7 +1422,7 @@ sh_install() {
 		sh_mkservice
 		sh_chroot_job "Certificando que todos pacotes estejam configurados corretamente em $_PART_ROOT:$dir_install" "xbps-reconfigure -fa"
 		sh_chroot_job "Removendo pacote bootstrap em $_PART_ROOT:$dir_install" "xbps-remove -y base-voidstrap" "$err_not_fatal"
-		sh_chowntmp
+		sh_chmodtmp
 		quiet=$false
 		alerta "$ccabec" "Instalação finalizada com sucesso."
 	else
@@ -1369,62 +1430,6 @@ sh_install() {
 		die "Erro tar #$?. Problemas para descompactar o tarball $_TARBALL_ROOTFS em $dir_install"
 	fi
 	sh_umountfs
-}
-
-set_option() {
-    if grep -Eq "^${1}.*" $CONF_FILE; then
-        sed -i -e "/^${1}.*/d" $CONF_FILE
-    fi
-    echo "${1} ${2}" >>$CONF_FILE
-}
-
-get_option() {
-    echo $(grep -E "^${1}.*" $CONF_FILE|sed -e "s|${1}||")
-}
-
-menu_timezone() {
-    local areas=(Africa America Antarctica Arctic Asia Atlantic Australia Europe Indian Pacific)
-    local area locations location
-
-    while (IFS='|'; ${DIALOG} ${area:+--default-item|"$area"} --colors --title " Select area " --menu "$MENULABEL" 19 51 19 $(printf '%s||' "${areas[@]}")); do
-        area=$(cat $ANSWER)
-        read -a locations -d '\n' < <(find /usr/share/zoneinfo/$area -type f -printf '%P\n' | sort)
-        if (IFS='|'; ${DIALOG} --title " Select location (${area}) " --colors --menu "$MENULABEL" 19 51 19 $(printf '%s||' "${locations[@]//_/ }")); then
-            location=$(tr ' ' '_' < $ANSWER)
-            set_option TIMEZONE "$area/$location"
-            TIMEZONE_DONE=1
-            return 0
-        else
-            continue
-        fi
-    done
-    return 1
-}
-
-sh_chooselocales() {
-	local cod nat codnatdefault
-
-   codnatdefault=$(localectl status | grep LANG| cut -d= -f2)
-   paises=()
-   paises+=("BR" "Brasil" )
-   while read line; do
-      cod=`echo $line | awk '{print $1}'`
-      nat=`echo $line | awk '{print $2, $3, $4, $5}'`
-      if [ "$cod" = "$codnatdefault" ]; then
-         paises+=("^$cod" "$nat")
-      else
-         paises+=("$cod" "$nat")
-      fi
-   done < <(grep -v "#" /usr/share/zoneinfo/iso3166.tab)
-
-   locale=$(${DIALOG}                                                             \
-               --backtitle    "$ccabec - Configuração disco destino"             \
-               --title        "$cdisco"                                          \
-               --cancel-label "$buttonback"                                      \
-               --colors                                                          \
-               --extra-button                                                    \
-               --extra-label  "$buttonpart"                                      \
-               --menu         "\n$cchoosedisk" 0 0 10 "${paises[@]}" 2>&1 >/dev/tty  )
 }
 
 sh_ambiente
