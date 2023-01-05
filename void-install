@@ -3,7 +3,7 @@
 
 #  void-install
 #  Created: 2022/12/24
-#  Altered: 2023/01/04
+#  Altered: 2023/01/05
 #
 #  Copyright (c) 2022-2022, Vilmar Catafesta <vcatafesta@gmail.com>
 #                2022-2022, Felipe Nogueira <contato.fnog@gmail.com>
@@ -35,7 +35,7 @@
 
 #system
 APP="${0##*/}"
-_VERSION_='0.34.60-20230104'
+_VERSION_='0.35.66-20230105'
 readonly DEPENDENCIES=(tar wget sed cat grep chroot tput printf blkid fdisk mkfs.ext2 mkfs.ext3 mkfs.ext4 mkfs.ext2 mkfs.btrfs mkfs.xfs mkfs.vfat dialog sfdisk lsblk parted)
 declare -A AsUser
 declare -i quiet=0 grafico=0
@@ -52,7 +52,7 @@ declare _HOSTNAME="voidlinux"
 declare _TIMEZONE="America/Sao_Paulo"
 declare _KEYMAP="br-abnt2"
 declare _CLOCK="UTC"
-declare _PKGS="vim neofetch pfetch openssh zstd curl lynx dialog"
+declare _PKGS="vim neofetch pfetch openssh zstd wget curl lynx dialog bash-completion git unzip zip"
 
 sh_ambiente() {
 	#export LC_ALL=C
@@ -779,7 +779,7 @@ sh_fluxboxminimal() {
 	local apkgs=('xorg-minimal' 'xinit' 'lxterminal' 'fluxbox' 'fbmenugen' 'dejavu-fonts-ttf' 'xterm' 'rxvt-unicode' 'xfce4-terminal'
 					 'pulseaudio' 'vlc' 'ristretto' 'mupdf' 'setxkbmap' 'Thunar' 'pcmanfm' 'firefox' 'firefox-i18n-pt-BR lxdm')
 
-	sh_chroot_job "Instalando pacotes do fluxbox em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
+	sh_chroot_job "Instalando pacotes do Fluxbox em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
 #	sh_chroot_job "Gerando menu customizado do fluxbox em $_PART_ROOT:$dir_install" "fbmenugen -i -o /home/${AsUser[cuser]}/.fluxbox/menu" "$err_not_fatal"
 	if [[ -f "$dir_install/home/${AsUser[cuser]}/.fluxbox/startup" ]]; then
 		sed -e "/xmodmap/s//# xmodmap/" -i "$dir_install/home/${AsUser[cuser]}/.fluxbox/startup" >>$BOOTLOG 2>&1
@@ -788,36 +788,48 @@ sh_fluxboxminimal() {
 }
 
 sh_openboxminimal() {
-	local apkgs=('xorg-minimal' 'xinit' 'openbox' 'lxterminal' 'dejavu-fonts-ttf' 'xterm rxvt-unicode' 'xfce4-terminal'
-					 'pulseaudio' 'vlc' 'ristretto' 'mupdf' 'setxkbmap' 'Thunar' 'pcmanfm' 'firefox' 'firefox-i18n-pt-BR' 'lxdm'
-					 'obconf')
-	sh_chroot_job "Instalando pacotes do openbox em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
+	local apkgs=('xorg-minimal' 'xinit' 'openbox' 'lxterminal' 'liberation-fonts-ttf' 'dejavu-fonts-ttf' 'xterm rxvt-unicode'
+					 'xfce4-terminal' 'obconf' 'lxdm' 'lxappearance' 'lxinput' 'lxrandr' 'pulseaudio' 'vlc' 'ristretto' 'mupdf'
+					 'setxkbmap' 'Thunar' 'pcmanfm' 'firefox' 'firefox-i18n-pt-BR')
+	sh_chroot_job "Instalando pacotes do Openbox em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
 }
 
-sh_plasma_desktopminimal() {
+sh_plasmaminimal() {
 	local apkgs=('xorg-minimal' 'plasma-desktop' 'xterm' 'lxdm' 'lxterminal' 'xfce4-terminal' 'NetworkManager'
 					 'pulseaudio' 'vlc' 'ristretto' 'mupdf' 'setxkbmap' 'firefox' 'firefox-i18n-pt-BR')
-	sh_chroot_job "Instalando pacotes do plasma-desktop em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
+	sh_chroot_job "Instalando pacotes do Plasma-Desktop em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
 }
 
 sh_xfce4minimal() {
 	local apkgs=('xorg-minimal' 'xfce4' 'xterm' 'lxdm' 'lxterminal' 'xfce4-terminal' 'NetworkManager'
 					 'pulseaudio' 'pavucontrol' 'vlc' 'ristretto' 'mupdf' 'setxkbmap' 'firefox' 'firefox-i18n-pt-BR'
 					 'xfce4-whiskermenu-plugin' 'xfce4-pulseaudio-plugin' 'network-manager-applet' 'xfce4-screenshooter')
-	sh_chroot_job "Instalando pacotes do xfce4 em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
+	sh_chroot_job "Instalando pacotes do Xfce4 em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
 }
 
 sh_i3minimal() {
 	local apkgs=('xorg-minimal' 'i3' 'dmenu' 'i3status' 'xterm' 'lxdm' 'lxterminal' 'xfce4-terminal' 'NetworkManager'
-					 'pulseaudio' 'vlc' 'ristretto' 'mupdf' 'setxkbmap' 'pcmanfm' 'firefox' 'firefox-i18n-pt-BR')
-	sh_chroot_job "Instalando pacotes do i3 em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
+					 'i3lock' 'geany' 'volumeicon' 'xfce4-clipman-plugin' 'mc' 'scrot' 'ImageMagick' 'dejavu-fonts-ttf'
+					 'lxappearance' 'gnome-themes-standard' 'axel' 'pavucontrol' 'pasystray' 'mps-youtube' 'youtube-dl' 'mpv' 'xarchiver'
+					 'cava' 'mate-themes' 'pulseaudio' 'vlc' 'ristretto' 'mupdf' 'setxkbmap' 'pcmanfm' 'firefox' 'firefox-i18n-pt-BR')
+	sh_chroot_job "Instalando pacotes do I3 em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
 }
 
 sh_swayminimal() {
 	local apkgs=('xorg-minimal' 'sway' 'xterm' 'lxdm' 'lxterminal' 'xfce4-terminal' 'NetworkManager'
 					 'pulseaudio' 'vlc' 'ristretto' 'mupdf' 'setxkbmap' 'firefox' 'firefox-i18n-pt-BR')
-	sh_chroot_job "Instalando pacotes do sway em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
+	sh_chroot_job "Instalando pacotes do Sway em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
 }
+
+sh_mateminimal() {
+	local apkgs=('xorg-minimal' 'mate' 'mate-extra' 'mate-applets' 'xterm' 'lxdm' 'lxterminal' 'xfce4-terminal' 'NetworkManager'
+					 'atril' 'caja-image-converter' 'caja-open-terminal' 'caja-sendto' 'caja-share' 'caja-wallpaper'
+					 'caja-xattr-tags' 'engrampa' 'eom' 'mate-calc' 'mate-icon-theme-faenza' 'mate-media' 'mate-netbook'
+					 'mate-power-manager' 'mate-screensaver' 'mate-sensors-applet' 'mate-system-monitor' 'mate-terminal' 'mate-utils'
+					 'mozo' 'pluma' 'pulseaudio' 'pavucontrol' 'vlc' 'ristretto' 'mupdf' 'setxkbmap' 'firefox' 'firefox-i18n-pt-BR')
+	sh_chroot_job "Instalando pacotes do Mate em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
+}
+
 
 sh_backup_partitions() {
 	if [ $# -ge 2 ]; then
@@ -1246,10 +1258,11 @@ sh_windowmanager() {
 		tty     			"Somente terminal, sem interface gráfica"	"on"	\
 		fluxbox			"Fluxbox"											"off"	\
 		openbox			"Openbox" 											"off"	\
-		plasma-desktop	"Kde Plasma-Desktop"								"off"	\
+		plasma			"Kde Plasma-Desktop"								"off"	\
 		xfce4				"Xfce4"												"off"	\
 		i3wm				"i3wm"												"off"	\
 		sway				"Sway"												"off"	\
+		mate				"Mate"												"off"	\
 		2>&1 >/dev/tty )
 
 	exit_status=$?
@@ -1354,7 +1367,7 @@ sh_chooselocales() {
 
 sh_chmodtmp() {
 	local cfile="$dir_install/etc/runit/core-services/03-filesystems.sh"
-	msg "INFO" "$(log_info_msg "Ajustando permissões em $_PART_ROOT:$dir_install/tmp")"
+	msg "INFO" "$(log_info_msg "Ajustando permissões em $_PART_ROOT:$dir_install")"
 	if [[ -e "$cfile" ]]; then
 		echo '' >> "$cfile"
 		echo 'msg "Adjusting permissions for /tmp and /var/tmp ..."'	>> "$cfile"
@@ -1365,8 +1378,7 @@ sh_chmodtmp() {
 }
 
 sh_install() {
-	local abase=('base-system' 'dbus' 'lvm2' 'wireless_tools' 'nano' 'grub' 'grub-x86_64-efi'
-					 'efivar' 'efibootmgr' 'os-prober' 'bash-completion' 'git')
+	local abase=('base-system' 'dbus' 'lvm2' 'wireless_tools' 'nano' 'grub' 'grub-x86_64-efi' 'efivar' 'efibootmgr' 'os-prober')
 
 	sh_umountfs
 	sh_choosedisk
@@ -1421,12 +1433,13 @@ sh_install() {
 		sh_update_wpa_suplicant
 
 		case "$wm" in
-			"fluxbox") sh_fluxboxminimal;;
-			"openbox") sh_openboxminimal;;
-			"plasma-desktop")	sh_plasma_desktopminimal;;
-			"xfce4")				sh_xfce4minimal;;
-			"i3wm")				sh_i3minimal;;
-			"sway")				sh_swayminimal;;
+			"fluxbox") 	sh_fluxboxminimal;;
+			"openbox")	sh_openboxminimal;;
+			"plasma")	sh_plasmaminimal;;
+			"xfce4")		sh_xfce4minimal;;
+			"i3wm")		sh_i3minimal;;
+			"sway")		sh_swayminimal;;
+			"mate")		sh_mateminimal;;
 		esac
 
 		sh_mkservice
