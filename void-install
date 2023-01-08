@@ -3,7 +3,7 @@
 
 #  void-install
 #  Created: 2022/12/24
-#  Altered: 2023/01/06
+#  Altered: 2023/01/08
 #
 #  Copyright (c) 2022-2022, Vilmar Catafesta <vcatafesta@gmail.com>
 #                2022-2022, Felipe Nogueira <contato.fnog@gmail.com>
@@ -35,8 +35,8 @@
 
 #system
 APP="${0##*/}"
-_VERSION_='0.35.80-20230106'
-readonly DEPENDENCIES=(tar wget sed cat grep chroot tput printf blkid fdisk mkfs.ext2 mkfs.ext3 mkfs.ext4 mkfs.ext2 mkfs.btrfs mkfs.xfs mkfs.vfat dialog sfdisk lsblk parted)
+_VERSION_='0.37.83-20230108'
+readonly DEPENDENCIES=(tar sed cat grep chroot tput printf blkid fdisk mkfs.ext2 mkfs.ext3 mkfs.ext4 mkfs.ext2 mkfs.btrfs mkfs.xfs mkfs.vfat dialog sfdisk lsblk parted)
 declare -A AsUser
 declare -i quiet=0 grafico=0
 declare -i LAUTO=0 LINSTALL=0 LCHROOT=0 LBIND=0
@@ -86,7 +86,7 @@ sh_ambiente() {
 	readonly BOOTLOG="/tmp/void-install-$(sh_diahora).log"
 	readonly LOGGER=/dev/tty8
 	readonly	CONF_FILE=/tmp/.void-install.conf
-#	readonly ANSWER=$(mktemp -t void-install-XXXXXXXX || exit 1)
+	readonly ANSWER=$(mktemp -t void-install-XXXXXXXX || exit 1)
 	: "${mkfs='EXT4'}"
 	: "${mbr='BIOS'}"
 	: "${dm='lxdm'}"
@@ -100,6 +100,13 @@ sh_ambiente() {
    : "${D_EXTRA=3}"x
    : "${D_ITEM_HELP=4}"
    : "${D_ESC=255}"
+
+	: "${LDISCO=}"
+	: "${LFS=}"
+	: "${LGRUB=}"
+	: "${LTECLADO=}"
+	: "${LWM=}"
+	: "${LEXTRA=}"
 
 	# dialog colors
 	BLACK="\Z0"
@@ -160,6 +167,18 @@ _PKGS="$_PKGS"
 EOF
 }
 
+sh_disableprintk() {
+	if [ -w /proc/sys/kernel/printk ]; then
+		echo 0 >/proc/sys/kernel/printk
+	fi
+}
+
+sh_enableprintk() {
+	if [ -w /proc/sys/kernel/printk ]; then
+		echo 4 >/proc/sys/kernel/printk
+	fi
+}
+
 sh_config() {
 	[[ -s "$app_conf" ]] || sh_touchconf
 	# shellcheck source=/dev/null
@@ -191,12 +210,11 @@ sh_checknet() {
    xurl="$1"
    # have internet?
 	msg "INFO" "$(log_info_msg "Testando internet em ${xurl}")" "$LINENO"
-   curl --silent --head --insecure "$xurl" | head -1 >>$BOOTLOG 2>&1 ||
-      {
-         evaluate_retval "$?"
-         die "Sem rota para o servidor ($xurl) - Check sua conexão com a internet!"
-		   return 1
-      }
+	response=$(curl --compressed -s -w "%{http_code}\n" -o /dev/null -k --url "${xurl}")
+   if [[ $response -eq 000 || $response -eq 404 ]]; then
+		evaluate_retval "$?"
+		die "Sem rota para o servidor ($xurl) - Check sua conexão com a internet!"
+   fi
    evaluate_retval "$?"
    return $?
 }
@@ -404,6 +422,7 @@ die() {
 	fi
    local msg=$1; shift
 	printf "%-75s\n" "$(DOT)${bold}${red}$msg${reset}" >&2
+  	sh_enableprintk
    exit 1
 }
 
@@ -956,6 +975,7 @@ sh_choosegrub() {
 			fi
 			;;
 	esac
+	LGRUB=$true
 }
 
 sh_choosefilesystem() {
@@ -989,6 +1009,7 @@ sh_choosefilesystem() {
 	         esac
 		;;
 	esac
+	LFS=$true
 }
 
 sh_choosedisk() {
@@ -1065,6 +1086,7 @@ sh_choosedisk() {
       	fi
 			sh_checkdisk
 			sh_backup_partitions "${sd}" "${DEVICE_ORIGEM}"
+			LDISCO=$true
 			return 0
 		fi
     	break
@@ -1182,6 +1204,7 @@ sh_confadduser()
 					_HOSTNAME="${AsUser[chostname]}"
 					sh_touchconf
                log_wait_msg 'Configurações efetuadas. Prosseguindo com instalação.'
+					LEXTRA=$true
 #					evaluate_retval "$?"
                ;;
          esac
@@ -1244,7 +1267,7 @@ init() {
 				;;
 			-i | -I | --install)
 				LINSTALL=1
-				appexec+=('sh_install')
+				appexec+=('sh_menu')
 				;;
 			-c | -C | --chroot)
 				LCHROOT=1
@@ -1305,9 +1328,14 @@ sh_windowmanager() {
 			esac
 		;;
 	esac
+	LWM=$true
 }
 
 sh_choosekeymap() {
+	if notconf "*** KEYBOARD ***" "Current layout : $_KEYMAP" "\n\n$cmsgSetKeyboardLayout?"; then
+		LTECLADO=$true
+		return 0
+	fi
 	if localectl >>$BOOTLOG 2>&1; then
 		items=$(localectl list-keymaps | sort -V)
 	else
@@ -1330,6 +1358,7 @@ sh_choosekeymap() {
 	if ! (( nchoice )); then
 		#loadkeys "$keymap"
 		_KEYMAP="$keymap"
+		LTECLADO=$true
 	fi
 	return $nchoice
 }
@@ -1406,14 +1435,12 @@ sh_install() {
 	local abase=('base-system' 'dbus' 'lvm2' 'wireless_tools' 'nano' 'grub' 'grub-x86_64-efi' 'efivar' 'efibootmgr' 'os-prober')
 
 	sh_umountfs
-	sh_choosedisk
-	sh_choosefilesystem
-	sh_choosegrub
-	if ! notconf "*** KEYBOARD ***" "Current layout : $_KEYMAP" "\n\n$cmsgSetKeyboardLayout?"; then
-		sh_choosekeymap
-   fi
-	sh_windowmanager
-	sh_confadduser "$@"
+#	sh_choosedisk
+#	sh_choosefilesystem
+#	sh_choosegrub
+#	sh_choosekeymap
+#	sh_windowmanager
+#	sh_confadduser "$@"
 
 	if ! sh_mkparted; then die "Erro"; fi
 	if ! sh_mkfs 	 ; then die "Erro"; fi
@@ -1478,6 +1505,52 @@ sh_install() {
 		die "Erro tar #$?. Problemas para descompactar o tarball $_TARBALL_ROOTFS em $dir_install"
 	fi
 	sh_umountfs
+	exit 0
+}
+
+sh_menu() {
+	local AFTER_HOSTNAME
+	while true
+	do
+		if [ -z "$DEFITEM" ]; then
+			DEFITEM="Disco"
+		fi
+
+		AFTER_HOSTNAME="Locale"
+      menu=$(${DIALOG} --default-item $DEFITEM				\
+			--extra-button --extra-label "Settings"			\
+			--title "void-install - menu de instalação"		\
+			--menu "$MENULABEL" 0 0 0								\
+			"Disco" 			"Definir Disco destino"				\
+			"FileSystem" 	"Definir Filesystem"					\
+			"BootLoader" 	"Definir Bootloader"					\
+			"Teclado" 		"Definir teclado do sistema"		\
+			"Wm" 				"Definir gerenciador de janela"	\
+			"Extra" 			"Usuario,senha,hostname"			\
+			"Instalar" 		"Iniciar instalação" 				\
+			"Sair" 			"Encerrar instalação" 2>&1 >/dev/tty )
+
+		if [ $? -eq 3 ]; then
+			# Show settings
+			cp $CONF_FILE /tmp/conf_hidden.$$;
+			sed -i "s/^ROOTPASSWORD.*/ROOTPASSWORD <-hidden->/" /tmp/conf_hidden.$$
+			${DIALOG} --title "Saved settings for installation" --textbox /tmp/conf_hidden.$$ 14 60
+			rm /tmp/conf_hidden.$$
+			return
+		fi
+
+		case "$menu" in
+			"Disco")			sh_choosedisk       && [ -n "$LDISCO" ]  		&& DEFITEM="FileSystem";;
+			"FileSystem")	sh_choosefilesystem && [ -n "$LFS" ] 			&& DEFITEM="BootLoader";;
+			"BootLoader")	sh_choosegrub       && [ -n "$LGRUB" ]			&& DEFITEM="Teclado";;
+        	"Teclado") 		sh_choosekeymap     && [ -n "$LTECLADO" ]    && DEFITEM="Wm";;
+        	"Wm") 			sh_windowmanager    && [ -n "$LWM" ]    	   && DEFITEM="Extra";;
+        	"Extra") 		sh_confadduser      && [ -n "$LEXTRA" ]    	&& DEFITEM="Instalar";;
+   		"Instalar") 	sh_install;;
+        	"Sair")			die "Instalação abortada...";;
+	      *) 				${DIALOG} --yesno "Abortar Instalação?" 0 0 && die
+		esac
+	done
 }
 
 sh_ambiente
@@ -1491,6 +1564,7 @@ sh_config
    sh_usage
    exit $(($# ? 0 : 1))
 }
+sh_disableprintk
 init "$@"
 
 # sanity checks
@@ -1500,3 +1574,4 @@ case $(( LINSTALL+LCHROOT )) in
 esac
 sh_checkroot
 for x in "${appexec[@]}"; do $x; done
+sh_enableprintk
