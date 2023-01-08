@@ -1587,7 +1587,7 @@ sh_checkinstall() {
 		DEFITEM="Disco"
       return 1
    elif [ -z "$LFS" ]; then
-		warning "FILESYSTEM" "O filesystems não foi configurado, faça isso antes de iniciar a instalação."
+		warning "FILESYSTEM" "O filesystem não foi configurado, faça isso antes de iniciar a instalação."
 		DEFITEM="FileSystem"
 		return 1
 	elif [ -z "$LGRUB" ]; then
