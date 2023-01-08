@@ -1128,6 +1128,28 @@ display_result() {
                00 0
 }
 
+display_config() {
+	[ -z "$LDISCO"] && local _device="não definido"     || local _device=${_DEVICE}
+	[ -z "$LDISCO"] && local _modelo="não definido"     || local _modelo=${SIZE_ORIGEM}/${MODEL_ORIGEM}
+	[ -z "$LFS"]    && local _mkfs="não definido"       || local _mkfs=${mkfs}
+	[ -z "$LGRUB"]  && local _bootloader="não definido" || local _bootloader=${mbr}
+	[ -z "$LEXTRA"] && local _fullname="não definido"   || local _fullname=${_USER_FULLNAME}
+	[ -z "$LEXTRA"] && local _hostname="não definido"   || local _hostname=${_HOSTNAME}
+	info "Configurações salvas para instalação" "\
+                            \n\nNome Completo       : \Zb\Z1${_fullname}${RESET}\
+                            \nUsername            : \Zb\Z1${_USER}${RESET}\
+                            \nPassword user       : \Zb\Z1${_PASSWD_USER}${RESET}\
+                            \nPassword root       : \Zb\Z1${_PASSWD_ROOT}${RESET}\
+                            \nHostname            : \Zb\Z1${_hostname}${RESET}\
+                            \nDisco destino       : \Zb\Z1${_device}${RESET}\
+                            \nTam/Modelo:         : \Zb\Z1${_modelo}${RESET}\
+                            \nFileSystem          : \Zb\Z1${_mkfs}${RESET}\
+                            \nBootloader          : \Zb\Z1${_bootloader}${RESET}\
+                            \nTeclado             : \Zb\Z1${_KEYMAP}${RESET}\
+                            \nGerenciador Janelas : \Zb\Z1${_WINDOWMANAGER}${RESET}\
+                            \n"
+}
+
 sh_confadduser()
 {
    while true
@@ -1519,7 +1541,6 @@ sh_install() {
 }
 
 sh_menu() {
-	local AFTER_HOSTNAME
 	while true
 	do
 		if [ -z "$DEFITEM" ]; then
@@ -1542,25 +1563,7 @@ sh_menu() {
 			"Sair" 			"Encerrar instalação" 2>&1 >/dev/tty )
 
 		if [ $? -eq 3 ]; then
-			[ -n "$LDISCO"] && local _device="não definido"     || local _device=${_DEVICE}
-			[ -n "$LDISCO"] && local _modelo="não definido"     || local _modelo=${SIZE_ORIGEM}/${MODEL_ORIGEM}
-			[ -n "$LFS"]    && local _mkfs="não definido"       || local _mkfs=${mkfs}
-			[ -n "$LGRUB"]  && local _bootloader="não definido" || local _bootloader=${mbr}
-			[ -n "$LEXTRA"] && local _fullname="não definido"   || local _fullname=${_USER_FULLNAME}
-			[ -n "$LEXTRA"] && local _hostname="não definido"   || local _hostname=${_HOSTNAME}
-			info "Configurações salvas para instalação" "\
-                              \n\nNome Completo       : \Zb\Z1${_fullname}${RESET}\
-                              \nUsername            : \Zb\Z1${_USER}${RESET}\
-                              \nPassword user       : \Zb\Z1${_PASSWD_USER}${RESET}\
-                              \nPassword root       : \Zb\Z1${_PASSWD_ROOT}${RESET}\
-                              \nHostname            : \Zb\Z1${_hostname}${RESET}\
-                              \nDisco destino       : \Zb\Z1${_device}${RESET}\
-                              \nTam/Modelo:         : \Zb\Z1${_modelo}${RESET}\
-                              \nFileSystem          : \Zb\Z1${_mkfs}${RESET}\
-                              \nBootloader          : \Zb\Z1${_bootloader}${RESET}\
-                              \nTeclado             : \Zb\Z1${_KEYMAP}${RESET}\
-                              \nGerenciador Janelas : \Zb\Z1${_WINDOWMANAGER}${RESET}\
-                              \n"
+			display_config
 			continue
 		fi
 
