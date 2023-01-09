@@ -17,5 +17,5 @@
 - 1 - usando make
 	- sudo make install
 
-- 2 - rodando no repo local
+- 2 - rodando no repo local (após download)
 	- ./void-install
