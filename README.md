@@ -14,4 +14,8 @@
 	- wget https://github.com/vcatafesta/sena/raw/main/ChangeLog
 
 ## Instalação:
+- 1 - usando make
 	- sudo make install
+
+- 2 - rodando no repo local
+	- ./void-install
