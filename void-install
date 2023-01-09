@@ -953,8 +953,8 @@ sh_choosegrub() {
 		--colors 																	\
 		--radiolist "$LABEL\n\n$cextra"										\
 		0 0 0																			\
-		EFI     "Interface de Firmaware Extensivel" $cefi           \
 		BIOS    "Sistema Básico de Entrada e Saída" $cbios          \
+		EFI     "Interface de Firmaware Extensivel" $cefi           \
 		2>&1 >/dev/tty )
 
 	exit_status=$?
@@ -983,10 +983,10 @@ sh_choosefilesystem() {
 		--colors 																	\
 		--radiolist "$LABEL\n\n$cextra"										\
 		10 70 0																		\
+		ext4     "Linux Ext4 - Rápido e maduro (journal)"	"on"		\
 		btrfs    "Oracle Btrfs - Novos recursos - imaturo"	"off"		\
 		ext2     "Linux Ext2 (sem journal)"						"off"		\
 		ext3     "Linux Ext3 (journal)"							"off"		\
-		ext4     "Linux Ext4 - Rápido e maduro (journal)"	"on"		\
 		xfs      "SGI's Xfs - Alto desempenho"					"off"		\
 		2>&1 >/dev/tty )
 
@@ -1310,13 +1310,13 @@ sh_windowmanager() {
 		--colors 																		\
 		--radiolist "$LABEL"															\
 		0 70 0																			\
+		tty     			"Somente terminal, sem interface gráfica"	"on"	\
 		fluxbox			"Fluxbox"											"off"	\
 		i3wm				"i3wm"												"off"	\
 		mate				"Mate"												"off"	\
-		openbox			"Openbox" 											"off"	\	
+		openbox			"Openbox" 											"off"	\
 		plasma			"Kde Plasma-Desktop"								"off"	\
 		sway				"Sway"												"off"	\
-		tty     			"Somente terminal, sem interface gráfica"	"on"	\
 		xfce4				"Xfce4"												"off"	\
 		2>&1 >/dev/tty )
 
