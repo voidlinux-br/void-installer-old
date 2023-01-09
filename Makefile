@@ -1,5 +1,5 @@
 SHELL=/bin/bash
-APP=void-instal
+APP=void-install
 DESTDIR=
 BINDIR=${DESTDIR}/opt/${APP}
 DOCDIR=${DESTDIR}/opt/${APP}/doc
@@ -11,13 +11,13 @@ DIRMODE=755
 .PHONY: build
 
 install:
-	@echo "     void-install - instalador para o Void Linux"
+	@echo "void-install - instalador para o Void Linux"
 	@echo ":: Aguarde, instalando software ${APP} em: ${BINDIR}"
 	@mkdir -p ${BINDIR}
 	@mkdir -p ${DOCDIR}
 	@mkdir -p ${INFODIR}
 	@install -d -m 1777 ${BINDIR}
-	@install -m 4755 sena ${BINDIR}/${APP}
+	@install -m 4755 ${APP} ${BINDIR}/${APP}
 	@mkdir -p ${INFODIR}
 	@cp Makefile ChangeLog INSTALL LICENSE MAINTAINERS README.md ${DOCDIR}/
 	@cp Makefile ChangeLog INSTALL LICENSE MAINTAINERS README.md ${INFODIR}/
@@ -26,8 +26,8 @@ install:
 	@echo -e "uso:"
 	@echo "	cd ${BINDIR}"
 	@echo "	./${APP}"
-	@echo ":: Considere colocar no teu path o ${BINDIR}"
 	@echo
+	@echo ":: Considere colocar no teu path o ${BINDIR}"
 uninstall:
 	@rm ${BINDIR}/${APP}
 	@rm -fd ${BINDIR}
