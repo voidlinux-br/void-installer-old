@@ -15,7 +15,7 @@
 
 ## Instalação:
 - 1 - usando make
-	- sudo make install
+	- # make install
 
 - 2 - rodando no repo local (após download)
-	- ./void-install
+	- # ./void-install
