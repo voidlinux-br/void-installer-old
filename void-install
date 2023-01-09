@@ -5,8 +5,8 @@
 #  Created: 2022/12/24
 #  Altered: 2023/01/08
 #
-#  Copyright (c) 2022-2022, Vilmar Catafesta <vcatafesta@gmail.com>
-#                2022-2022, Felipe Nogueira <contato.fnog@gmail.com>
+#  Copyright (c) 2022-2023, Vilmar Catafesta <vcatafesta@gmail.com>
+#                2022-2023, Felipe Nogueira <contato.fnog@gmail.com>
 #  All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
@@ -35,7 +35,7 @@
 
 #system
 APP="${0##*/}"
-_VERSION_='0.38.87-20230108'
+_VERSION_='0.41.105-20230108'
 readonly DEPENDENCIES=(tar sed cat grep chroot tput printf blkid fdisk mkfs.ext2 mkfs.ext3 mkfs.ext4 mkfs.ext2 mkfs.btrfs mkfs.xfs mkfs.vfat dialog sfdisk lsblk parted)
 declare -A AsUser
 declare -i quiet=0 grafico=0
@@ -56,15 +56,13 @@ declare _CLOCK="UTC"
 declare _PKGS="vim neofetch pfetch openssh zstd wget curl lynx dialog bash-completion git unzip zip"
 
 sh_ambiente() {
-	#export LC_ALL=C
-	#export LANG=C
 	readonly cnickefi='void'
 	readonly dir_install='/mnt/voidlinux'
-	readonly app_conf='void-install.conf'
+	readonly app_conf='/tmp/void-install.conf'
 	readonly url_google='https://google.com/'
 	readonly url_mirror='http://void.chililinux.com/voidlinux'
 	readonly cmsgusermanager="$APP v$_VERSION_ configuracao"
-	readonly ccreatenewuser='Configurações'
+	readonly ccreatenewuser='Configurações extras'
 	readonly cmsgadduser='Criando usuario'
 	readonly cmsgchgpasswd='Ajustando senha'
 	readonly cdisco='Escolha DISCO destino'
@@ -75,7 +73,7 @@ sh_ambiente() {
 	readonly cmsg_all_mounted_part='O disco selecionado contém partições montadas'
 	readonly cmsgSetKeyboardLayout='Definir outro layout do teclado'
 	readonly cmsg_umount_partition='Aguarde, Desmontando particao de trabalho'
-	readonly buttonback='Finalizar'
+	readonly buttonback='Retornar'
    readonly buttonpart='Info disco'
 	readonly yeslabel='Sim'
    readonly nolabel='Não'
@@ -86,8 +84,6 @@ sh_ambiente() {
 	readonly shell='/bin/sh'
 	readonly BOOTLOG="/tmp/void-install-$(sh_diahora).log"
 	readonly LOGGER=/dev/tty8
-	readonly	CONF_FILE=/tmp/.void-install.conf
-	readonly ANSWER=$(mktemp -t void-install-XXXXXXXX || exit 1)
 	: "${mkfs=EXT4}"
 	: "${mbr=BIOS}"
 	: "${lEFI=$false}"
@@ -107,6 +103,7 @@ sh_ambiente() {
 	: "${LTECLADO=}"
 	: "${LWM=}"
 	: "${LEXTRA=}"
+	: "${LTIMEZONE=}"
 
 	# dialog colors
 	BLACK="\Z0"
@@ -121,7 +118,7 @@ sh_ambiente() {
 	REVERSE="\Zr"
 	UNDERLINE="\Zu"
 	RESET="\Zn"
-	LABEL="${BOLD}Use as teclas PARA CIMA e PARA BAIXO para navegar. Use TAB para alternar entre os botões e ENTER para selecionar.${RESET}"
+	LABEL="${BOLD}Use as teclas PARA CIMA e PARA BAIXO para navegar.\nUse TAB para alternar entre os botões e ENTER para selecionar.${RESET}"
 	: echo "$err_fatal"
 	: echo "$LAUTO"
 	: echo "$pink"
@@ -183,9 +180,6 @@ sh_config() {
 	if 	[[ -f "$app_conf" ]]
 	then 	source "$app_conf"
 	else  die "ERRO: falha na abertura de $app_conf!"
-	fi
-	if [ ! -f $CONF_FILE ]; then
-   	touch -f $CONF_FILE
 	fi
 	sh_setadduser
 }
@@ -441,18 +435,6 @@ info() {
 }
 
 alerta() {
-	if (( grafico )); then
-		${DIALOG}               			\
-		--title  "$1"                    \
-		--backtitle "$ccabec"            \
-		--msgbox    "$2\n$3\n$4\n$5\n$6" \
-		10 60
-	else
-		log_success_msg "$2"
-	fi
-}
-
-warning() {
 	log_success_msg "$2"
 	${DIALOG}               			\
 	--title  	"$1"                 \
@@ -462,14 +444,18 @@ warning() {
 }
 
 conf() {
-   ${DIALOG}                     \
-      --title     "$1"           \
-      --backtitle "$ccabec"      \
-      --yes-label "$yeslabel"    \
-      --no-label  "$nolabel"     \
-      --yesno     "$2"           \
-      8 60
-   return $?
+	xtitle="$1"
+	shift
+	${DIALOG}                        \
+         --colors					      \
+         --title     "$xtitle"      \
+         --backtitle "$ccabec"      \
+         --yes-label "$yeslabel"    \
+         --no-label  "$nolabel"     \
+         --yesno     "$*"           \
+         0 0
+         nchoice=$?
+         return $nchoice
 }
 
 notconf() {
@@ -744,7 +730,6 @@ sh_chroot_job() {
 	local lretval=0
 
 	msg "INFO" "$(log_info_msg "$cmsg")" "$LINENO"
-#	chroot "$dir_install" "$shell" -c "$cjob" >>$BOOTLOG 2>&1
 	chroot "$dir_install" "$shell" -c "$cjob" >>$BOOTLOG 2>&1
 	lretval="$?"
 	evaluate_retval "$lretval" "$erro_fatal"
@@ -954,8 +939,10 @@ sh_choosegrub() {
 		cextra="EFI não detectado \n↓ é recomendável instalar BIOS ↓"
 	fi
 
-	mbr=$(${DIALOG} --radiolist "Instalacao do GRUB:\n\n$cextra"   \
-		0 0 0                                                       \
+	mbr=$(${DIALOG} --title "Instalação do GRUB (BOOTLOADER"			\
+		--colors 																	\
+		--radiolist "$LABEL\n\n$cextra"										\
+		0 0 0																			\
 		EFI     "Interface de Firmaware Extensivel" $cefi           \
 		BIOS    "Sistema Básico de Entrada e Saída" $cbios          \
 		2>&1 >/dev/tty )
@@ -963,16 +950,7 @@ sh_choosegrub() {
 	exit_status=$?
 	case $exit_status in
 		"$D_ESC"|"$D_CANCEL")
-	       "$DIALOG" --clear --backtitle "$ccabec" --yesno "Deseja sair sem instalar?" 0 0
-	         case $? in
-	            "$D_OK")
-	               die "Instalação abortada..."
-	               ;;
-	            "$D_CANCEL")
-	               exit_status=99
-						sh_choosegrub
-	               ;;
-	         esac
+			return
 			;;
 		"$D_OK")
 			if ! sh_bootefi; then
@@ -993,8 +971,10 @@ sh_choosefilesystem() {
 	local exit_status
 
 	cextra="↓ é recomendável EXT4 ↓"
-	mkfs=$(${DIALOG} --radiolist "Escolha o filesystem\n\n$cextra" \
-		0 0 0                                                       \
+	mkfs=$(${DIALOG} --title "Escolha o FILESYSTEM"						\
+		--colors 																	\
+		--radiolist "$LABEL\n\n$cextra"										\
+		0 0 0																			\
 		BTRFS    "Oracle Btrfs - Novos recursos - imaturo"	"off"		\
 		EXT2     "Linux Ext2 (sem journal)"						"off"		\
 		EXT3     "Linux Ext3 (journal)"							"off"		\
@@ -1005,19 +985,48 @@ sh_choosefilesystem() {
 	exit_status=$?
 	case $exit_status in
 		"$D_ESC"|"$D_CANCEL")
-	       "$DIALOG" --clear --backtitle "$ccabec" --yesno "Deseja sair sem instalar?" 0 0
-	         case $? in
-	            "$D_OK")
-	               die "Instalação abortada..."
-	               ;;
-	            "$D_CANCEL")
-	               exit_status=99
-						sh_choosefilesystem
-	               ;;
-	         esac
-		;;
+			return
+			;;
 	esac
 	LFS=$true
+}
+
+sh_choosetimezone() {
+	local coff='off'
+	local con='on'
+
+	timezone=$(${DIALOG} --title "Escolha o TIMEZONE"	\
+		--colors 												\
+		--colors													\
+		--default-item "$_TIMEZONE"						\
+		--radiolist "$LABEL"									\
+		0 70 0													\
+		Araguaina		"America/Araguaina"		"off"	\
+		Bahia				"America/Bahia"			"off"	\
+		Belem				"America/Belem"			"off"	\
+		Boa_Vista		"America/Boa_Vista"		"off"	\
+		Campo_Grande	"America/Campo_Grande"	"off"	\
+		Cuiaba			"America/Cuiaba"			"off"	\
+		Fortaleza		"America/Forteleza"		"off"	\
+		Maceio			"America/Maceio"			"off"	\
+		Manaus			"America/Manaus"			"off"	\
+		Noronha			"America/Noronha"			"off"	\
+		Porto_Acre		"America/Porto_Acre"		"off"	\
+		Porto_Velho		"America/Porto_Velho"	"off"	\
+		Recife			"America/Recife"			"off"	\
+		Rio_Branco		"America/Rio_Branco"		"off"	\
+		Santarem			"America/Santarem"		"off"	\
+		Sao_Paulo		"America/Sao_Paulo"		"on"	\
+		2>&1 >/dev/tty )
+
+	exit_status=$?
+	case $exit_status in
+		"$D_ESC"|"$D_CANCEL")
+			return
+			;;
+	esac
+	_TIMEZONE="America/$timezone"
+	LTIMEZONE=$true
 }
 
 sh_choosedisk() {
@@ -1045,23 +1054,13 @@ sh_choosedisk() {
     				--colors																				\
 	            --extra-button                                                    \
                --extra-label  "$buttonpart"                                      \
-    				--menu 			"$LABEL\n\n$cchoosedisk" 0 0 10 "${array[@]}" 2>&1 >/dev/tty 	)
+    				--menu 			"$LABEL" 0 0 10 "${array[@]}" 2>&1 >/dev/tty 	)
 
     	exit_status=$?
 		case $exit_status in
-    	"$D_ESC"|"$D_CANCEL")
-			"$DIALOG" --clear --backtitle "$ccabec" --yesno "Deseja sair sem instalar?" 0 0
-			case $? in
-	      	"$D_OK")
-					die "Instalação abortada..."
-             	break
-	            ;;
-				"$D_CANCEL")
-					exit_status=99
-					continue
-					;;
-			esac
-    		;;
+		"$D_ESC"|"$D_CANCEL")
+			return
+	  		;;
 		3)
       	result=$(fdisk -l "$sd");
          display_result "$result" "$cmsgpart" "$cmsg_part_disk"
@@ -1128,28 +1127,6 @@ display_result() {
                00 0
 }
 
-display_config() {
-	[ -z "$LDISCO"] && local _device="não definido"     || local _device=${_DEVICE}
-	[ -z "$LDISCO"] && local _modelo="não definido"     || local _modelo=${SIZE_ORIGEM}/${MODEL_ORIGEM}
-	[ -z "$LFS"]    && local _mkfs="não definido"       || local _mkfs=${mkfs}
-	[ -z "$LGRUB"]  && local _bootloader="não definido" || local _bootloader=${mbr}
-	[ -z "$LEXTRA"] && local _fullname="não definido"   || local _fullname=${_USER_FULLNAME}
-	[ -z "$LEXTRA"] && local _hostname="não definido"   || local _hostname=${_HOSTNAME}
-	info "Configurações salvas para instalação" "\
-                            \n\nNome Completo       : \Zb\Z1${_fullname}${RESET}\
-                            \nUsername            : \Zb\Z1${_USER}${RESET}\
-                            \nPassword user       : \Zb\Z1${_PASSWD_USER}${RESET}\
-                            \nPassword root       : \Zb\Z1${_PASSWD_ROOT}${RESET}\
-                            \nHostname            : \Zb\Z1${_hostname}${RESET}\
-                            \nDisco destino       : \Zb\Z1${_device}${RESET}\
-                            \nTam/Modelo:         : \Zb\Z1${_modelo}${RESET}\
-                            \nFileSystem          : \Zb\Z1${_mkfs}${RESET}\
-                            \nBootloader          : \Zb\Z1${_bootloader}${RESET}\
-                            \nTeclado             : \Zb\Z1${_KEYMAP}${RESET}\
-                            \nGerenciador Janelas : \Zb\Z1${_WINDOWMANAGER}${RESET}\
-                            \n"
-}
-
 sh_confadduser()
 {
    while true
@@ -1169,23 +1146,14 @@ sh_confadduser()
          "Tam/Modelo: "                           7 1 "${SIZE_ORIGEM}/${MODEL_ORIGEM}" 7 28 20 0 2 \
          "FileSystem: "                           8 1 "${mkfs}"                        8 28 20 0 2 \
          "Teclado: "                              9 1 "${_KEYMAP}"                     9 28 20 0 2 \
-         "Window Manager: "                      10 1 "${_WINDOWMANAGER}"             10 28 20 0 2 \
+         "Timezone: "                            10 1 "${_TIMEZONE}"                  10 28 20 0 2 \
+         "Window Manager: "                      11 1 "${_WINDOWMANAGER}"             11 28 20 0 2 \
          2>&1 1>&3)
          exit_status=$?
 
          case $exit_status in
             "$D_ESC"|"$D_CANCEL")
-		         "$DIALOG" --clear --backtitle "$ccabec" --yesno "Deseja sair sem instalar?" 0 0
-		         case $? in
-		            "$D_OK")
-		               die "Instalação abortada..."
-		               break
-		               ;;
-		            "$D_CANCEL")
-		               exit_status=99
-							continue
-		               ;;
-		         esac
+					return
 		         ;;
             "$D_OK")
                mapfile -t <<< "$usertext" aUser
@@ -1331,7 +1299,9 @@ sh_bootefi() {
 sh_windowmanager() {
 	local cextra
 
-	wm=$(${DIALOG} --radiolist "Gerenciador de janelas:\n\n$cextra"	\
+	wm=$(${DIALOG} --title "WINDOWS MANAGER"									\
+		--colors 																		\
+		--radiolist "$LABEL\n\nGerenciador de janelas:\n\n$cextra"		\
 		0 0 0																				\
 		tty     			"Somente terminal, sem interface gráfica"	"on"	\
 		fluxbox			"Fluxbox"											"off"	\
@@ -1346,17 +1316,8 @@ sh_windowmanager() {
 	exit_status=$?
 	case $exit_status in
 		"$D_ESC"|"$D_CANCEL")
-			"$DIALOG" --clear --backtitle "$ccabec" --yesno "Deseja sair sem instalar?" 0 0
-			case $? in
-	      	"$D_OK")
-					die "Instalação abortada..."
-	            ;;
-				"$D_CANCEL")
-					exit_status=99
-					sh_windowmanager
-					;;
-			esac
-		;;
+			return
+			;;
 	esac
 	_WINDOWMANAGER="$wm"
 	LWM=$true
@@ -1379,10 +1340,12 @@ sh_choosekeymap() {
 	done
 
 	keymap=$(${DIALOG}                        		\
+					--colors										\
+					--default-item "$_KEYMAP"				\
 					--backtitle "${ccabec}"       		\
 					--title "definir layout do teclado"	\
-					--menu ""                     		\
-					0 0 0                         		\
+					--menu "$LABEL"                 		\
+					0 70 0    	                   		\
 					"${options[@]}" 3>&1 1>&2 2>&3)
 
 	nchoice=$?
@@ -1392,62 +1355,6 @@ sh_choosekeymap() {
 		LTECLADO=$true
 	fi
 	return $nchoice
-}
-
-set_option() {
-    if grep -Eq "^${1}.*" $CONF_FILE; then
-        sed -i -e "/^${1}.*/d" $CONF_FILE
-    fi
-    echo "${1} ${2}" >>$CONF_FILE
-}
-
-get_option() {
-    echo $(grep -E "^${1}.*" $CONF_FILE|sed -e "s|${1}||")
-}
-
-menu_timezone() {
-    local areas=(Africa America Antarctica Arctic Asia Atlantic Australia Europe Indian Pacific)
-    local area locations location
-
-    while (IFS='|'; ${DIALOG} ${area:+--default-item|"$area"} --colors --title " Select area " --menu "$LABEL" 19 51 19 $(printf '%s||' "${areas[@]}")); do
-        area=$(cat $ANSWER)
-        read -a locations -d '\n' < <(find /usr/share/zoneinfo/$area -type f -printf '%P\n' | sort)
-        if (IFS='|'; ${DIALOG} --title " Select location (${area}) " --colors --menu "$LABEL" 19 51 19 $(printf '%s||' "${locations[@]//_/ }")); then
-            location=$(tr ' ' '_' < $ANSWER)
-            set_option TIMEZONE "$area/$location"
-            TIMEZONE_DONE=1
-            return 0
-        else
-            continue
-        fi
-    done
-    return 1
-}
-
-sh_chooselocales() {
-	local cod nat codnatdefault
-
-   codnatdefault=$(localectl status | grep LANG| cut -d= -f2)
-   paises=()
-   paises+=("BR" "Brasil" )
-   while read line; do
-      cod=`echo $line | awk '{print $1}'`
-      nat=`echo $line | awk '{print $2, $3, $4, $5}'`
-      if [ "$cod" = "$codnatdefault" ]; then
-         paises+=("^$cod" "$nat")
-      else
-         paises+=("$cod" "$nat")
-      fi
-   done < <(grep -v "#" /usr/share/zoneinfo/iso3166.tab)
-
-   locale=$(${DIALOG}                                                             \
-               --backtitle    "$ccabec - Configuração disco destino"             \
-               --title        "$cdisco"                                          \
-               --cancel-label "$buttonback"                                      \
-               --colors                                                          \
-               --extra-button                                                    \
-               --extra-label  "$buttonpart"                                      \
-               --menu         "\n$cchoosedisk" 0 0 10 "${paises[@]}" 2>&1 >/dev/tty  )
 }
 
 sh_chmodtmp() {
@@ -1460,6 +1367,68 @@ sh_chmodtmp() {
 		echo 'chmod 1777 /tmp /var/tmp' 											>> "$cfile"
 	fi
 	evaluate_retval "$?" "$err_not_fatal"
+}
+
+display_config() {
+	[[ -z "$LDISCO"    ]] && local _device="não definido"     || local _device=${_DEVICE}
+	[[ -z "$LDISCO"    ]] && local _modelo="não definido"     || local _modelo=${SIZE_ORIGEM}/${MODEL_ORIGEM}
+	[[ -z "$LFS"       ]] && local _mkfs="não definido"       || local _mkfs=${mkfs}
+	[[ -z "$LGRUB"     ]] && local _bootloader="não definido" || local _bootloader=${mbr}
+	[[ -z "$LEXTRA"    ]] && local _fullname="não definido"   || local _fullname=${_USER_FULLNAME}
+	[[ -z "$LEXTRA"    ]] && local _hostname="não definido"   || local _hostname=${_HOSTNAME}
+	[[ -z "$LTIMEZONE" ]] && local _timezone="não definido"   || local _timezone=${_TIMEZONE}
+	SETUP="\
+                            \n\nNome Completo       : \Zb\Z1${_fullname}${RESET}\
+                            \nUsername            : \Zb\Z1${_USER}${RESET}\
+                            \nPassword user       : \Zb\Z1${_PASSWD_USER}${RESET}\
+                            \nPassword root       : \Zb\Z1${_PASSWD_ROOT}${RESET}\
+                            \nHostname            : \Zb\Z1${_hostname}${RESET}\
+                            \nDisco destino       : \Zb\Z1${_device}${RESET}\
+                            \nTam/Modelo:         : \Zb\Z1${_modelo}${RESET}\
+                            \nFileSystem          : \Zb\Z1${_mkfs}${RESET}\
+                            \nBootloader          : \Zb\Z1${_bootloader}${RESET}\
+                            \nTeclado             : \Zb\Z1${_KEYMAP}${RESET}\
+                            \nTimezone            : \Zb\Z1${_timezone}${RESET}\
+                            \nGerenciador Janelas : \Zb\Z1${_WINDOWMANAGER}${RESET}\
+                            \n"
+}
+
+sh_checkinstall() {
+	if [ -z "$LDISCO" ]; then
+   	alerta "DISCO" "O disco não foi configurado, faça isso antes de iniciar a instalação."
+		DEFITEM="Disco"
+      return 1
+   elif [ -z "$LFS" ]; then
+		alerta "FILESYSTEM" "O filesystem não foi configurado, faça isso antes de iniciar a instalação."
+		DEFITEM="FileSystem"
+		return 1
+	elif [ -z "$LGRUB" ]; then
+		alerta "BOOTLOADER" "O Bootloader não foi configurado, faça isso antes de iniciar a instalação."
+		DEFITEM="BootLoader"
+		return 1
+	elif [ -z "$LTECLADO" ]; then
+		alerta "TECLADO" "O teclado não foi configurado, faça isso antes de iniciar a instalação."
+		DEFITEM="Teclado"
+		return 1
+	elif [ -z "$LTIMEZONE" ]; then
+		alerta "TIMEZONE" "O timezone não foi configurado, faça isso antes de iniciar a instalação."
+		DEFITEM="Timezone"
+		return 1
+	elif [ -z "$LWM" ]; then
+		alerta "WINDOW MANAGER" "O Gerenciador de Janelas não foi configurado, faça isso antes de iniciar a instalação."
+		DEFITEM="Wm"
+		return 1
+	elif [ -z "$LEXTRA" ]; then
+		alerta "EXTRA" "Extra não foi configurado, faça isso antes de iniciar a instalação."
+		DEFITEM="Extra"
+		return 1
+	fi
+
+	display_config
+	if conf "Configurações salvas para instalação" "$SETUP \nDeseja iniciar a instalação?"; then
+		return 0
+	fi
+	return 1
 }
 
 sh_install() {
@@ -1543,20 +1512,23 @@ sh_install() {
 sh_menu() {
 	while true
 	do
+		sh_touchconf
 		if [ -z "$DEFITEM" ]; then
 			DEFITEM="Disco"
 		fi
 
 		AFTER_HOSTNAME="Locale"
-      menu=$(${DIALOG} --backtitle "$ccabec"					\
+      menu=$(${DIALOG}	--backtitle "$ccabec"				\
+			--colors														\
 			--default-item "$DEFITEM"								\
 			--extra-button --extra-label "Definições"			\
 			--title "void-install - menu de instalação"		\
-			--menu "$MENULABEL" 6 100 0							\
+			--menu "$LABEL" 9 100 0									\
 			"Disco" 			"Definir Disco destino"				\
 			"FileSystem" 	"Definir Filesystem"					\
 			"BootLoader" 	"Definir Bootloader"					\
 			"Teclado" 		"Definir teclado do sistema"		\
+			"Timezone" 		"Definir timezone"					\
 			"Wm" 				"Definir gerenciador de janela"	\
 			"Extra" 			"Definir Usuario,senha,hostname"	\
 			"Instalar" 		"Iniciar instalação" 				\
@@ -1564,6 +1536,7 @@ sh_menu() {
 
 		if [ $? -eq 3 ]; then
 			display_config
+			info "Configurações salvas para instalação" "$SETUP"
 			continue
 		fi
 
@@ -1571,43 +1544,15 @@ sh_menu() {
 			"Disco")			sh_choosedisk       && [ -n "$LDISCO" ]  		&& DEFITEM="FileSystem";;
 			"FileSystem")	sh_choosefilesystem && [ -n "$LFS" ] 			&& DEFITEM="BootLoader";;
 			"BootLoader")	sh_choosegrub       && [ -n "$LGRUB" ]			&& DEFITEM="Teclado";;
-        	"Teclado") 		sh_choosekeymap     && [ -n "$LTECLADO" ]    && DEFITEM="Wm";;
+        	"Teclado") 		sh_choosekeymap     && [ -n "$LTECLADO" ]    && DEFITEM="Timezone";;
+        	"Timezone") 	sh_choosetimezone   && [ -n "$LTIMEZONE" ]   && DEFITEM="Wm";;
         	"Wm") 			sh_windowmanager    && [ -n "$LWM" ]    	   && DEFITEM="Extra";;
         	"Extra") 		sh_confadduser      && [ -n "$LEXTRA" ]    	&& DEFITEM="Instalar";;
    		"Instalar") 	sh_install;;
         	"Sair")			die "Instalação abortada...";;
-	      *) 				${DIALOG} --yesno "Abortar Instalação?" 0 0 && die
+	      *) 				${DIALOG} --title "$ccabec" --yesno "\nSair do instalador sem instalar?" 8 70 && die
 		esac
 	done
-}
-
-sh_checkinstall() {
-	if [ -z "$LDISCO" ]; then
-   	warning "DISCO" "O disco não foi configurado, faça isso antes de iniciar a instalação."
-		DEFITEM="Disco"
-      return 1
-   elif [ -z "$LFS" ]; then
-		warning "FILESYSTEM" "O filesystem não foi configurado, faça isso antes de iniciar a instalação."
-		DEFITEM="FileSystem"
-		return 1
-	elif [ -z "$LGRUB" ]; then
-		warning "BOOTLOADER" "O Bootloader não foi configurado, faça isso antes de iniciar a instalação."
-		DEFITEM="BootLoader"
-		return 1
-	elif [ -z "$LTECLADO" ]; then
-		warning "TECLADO" "O teclado não foi configurado, faça isso antes de iniciar a instalação."
-		DEFITEM="Teclado"
-		return 1
-	elif [ -z "$LWM" ]; then
-		warning "WINDOW MANAGER" "O Gerenciador de Janelas não foi configurado, faça isso antes de iniciar a instalação."
-		DEFITEM="Wm"
-		return 1
-	elif [ -z "$LEXTRA" ]; then
-		warning "EXTRAS" "Extras não foi configurado, faça isso antes de iniciar a instalação."
-		DEFITEM="Extra"
-		return 1
-	fi
-	return 0
 }
 
 sh_ambiente
@@ -1632,3 +1577,6 @@ esac
 sh_checkroot
 for x in "${appexec[@]}"; do $x; done
 sh_enableprintk
+
+:<<'comment'
+comment
