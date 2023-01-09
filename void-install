@@ -3,7 +3,7 @@
 
 #  void-install
 #  Created: 2022/12/24
-#  Altered: 2023/01/08
+#  Altered: 2023/01/09
 #
 #  Copyright (c) 2022-2023, Vilmar Catafesta <vcatafesta@gmail.com>
 #                2022-2023, Felipe Nogueira <contato.fnog@gmail.com>
@@ -35,7 +35,7 @@
 
 #system
 APP="${0##*/}"
-_VERSION_='0.41.105-20230108'
+_VERSION_='0.41.122-20230109'
 readonly DEPENDENCIES=(tar sed cat grep chroot tput printf blkid fdisk mkfs.ext2 mkfs.ext3 mkfs.ext4 mkfs.ext2 mkfs.btrfs mkfs.xfs mkfs.vfat dialog sfdisk lsblk parted)
 declare -A AsUser
 declare -i quiet=0 grafico=0
@@ -62,16 +62,14 @@ sh_ambiente() {
 	readonly url_google='https://google.com/'
 	readonly url_mirror='http://void.chililinux.com/voidlinux'
 	readonly cmsgusermanager="$APP v$_VERSION_ configuracao"
-	readonly ccreatenewuser='Configurações extras'
 	readonly cmsgadduser='Criando usuario'
 	readonly cmsgchgpasswd='Ajustando senha'
-	readonly cdisco='Escolha DISCO destino'
  	readonly cchoosedisk='Escolha o disco:'
 	readonly cmsg_part_disk='Visualizar partições do disco'
 	readonly cmsgpart='Particionamento automatico'
 	readonly cwarning='** AVISO **'
 	readonly cmsg_all_mounted_part='O disco selecionado contém partições montadas'
-	readonly cmsgSetKeyboardLayout='Definir outro layout do teclado'
+	readonly cmsgSetKeyboardLayout='Escolher outro layout do teclado'
 	readonly cmsg_umount_partition='Aguarde, Desmontando particao de trabalho'
 	readonly buttonback='Retornar'
    readonly buttonpart='Info disco'
@@ -462,6 +460,7 @@ notconf() {
 	xtitle="$1"
 	shift
 	${DIALOG}							\
+			--colors						\
 			--title     "$xtitle"	\
 			--backtitle "$ccabec"	\
 			--yes-label "Não"			\
@@ -624,15 +623,15 @@ sh_mkfs() {
 	evaluate_retval
 
 	msg "INFO" "$(log_info_msg "Formatando partição ROOT: ${_PART_ROOT} FS ${mkfs,,}")" "$LINENO"
-   if [[ "$mkfs" == "EXT2" ]]; then
+   if [[ "$mkfs" == "ext2" ]]; then
 		mkfs.ext2 -F -L "VOID" "${_PART_ROOT}" >>$BOOTLOG 2>&1
-   elif [[ "$mkfs" == "EXT3" ]]; then
+   elif [[ "$mkfs" == "ext3" ]]; then
 		mkfs.ext3 -F -L "VOID" "${_PART_ROOT}" >>$BOOTLOG 2>&1
-   elif [[ "$mkfs" == "EXT4" ]]; then
+   elif [[ "$mkfs" == "ext4" ]]; then
 		mkfs.ext4 -F -L "VOID" "${_PART_ROOT}" >>$BOOTLOG 2>&1
-   elif [[ "$mkfs" == "BTRFS" ]]; then
+   elif [[ "$mkfs" == "btrfs" ]]; then
 		mkfs.btrfs -f -L "VOID" "${_PART_ROOT}" >>$BOOTLOG 2>&1
-   elif [[ "$mkfs" == "XFS" ]]; then
+   elif [[ "$mkfs" == "xfs" ]]; then
 		mkfs.xfs -f -L "VOID" "${_PART_ROOT}" >>$BOOTLOG 2>&1
 	fi
 	evaluate_retval "$?"
@@ -939,7 +938,7 @@ sh_choosegrub() {
 		cextra="EFI não detectado \n↓ é recomendável instalar BIOS ↓"
 	fi
 
-	mbr=$(${DIALOG} --title "Instalação do GRUB (BOOTLOADER"			\
+	mbr=$(${DIALOG} --title "** BOOTLOADER (GRUB) **"					\
 		--colors 																	\
 		--radiolist "$LABEL\n\n$cextra"										\
 		0 0 0																			\
@@ -971,15 +970,15 @@ sh_choosefilesystem() {
 	local exit_status
 
 	cextra="↓ é recomendável EXT4 ↓"
-	mkfs=$(${DIALOG} --title "Escolha o FILESYSTEM"						\
+	mkfs=$(${DIALOG} --title "** FILESYSTEM **"							\
 		--colors 																	\
 		--radiolist "$LABEL\n\n$cextra"										\
-		0 0 0																			\
-		BTRFS    "Oracle Btrfs - Novos recursos - imaturo"	"off"		\
-		EXT2     "Linux Ext2 (sem journal)"						"off"		\
-		EXT3     "Linux Ext3 (journal)"							"off"		\
-		EXT4     "Linux Ext4 - Rápido e maduro (journal)"	"on"		\
-		XFS      "SGI's Xfs - Alto desempenho"					"off"		\
+		10 70 0																		\
+		btrfs    "Oracle Btrfs - Novos recursos - imaturo"	"off"		\
+		ext2     "Linux Ext2 (sem journal)"						"off"		\
+		ext3     "Linux Ext3 (journal)"							"off"		\
+		ext4     "Linux Ext4 - Rápido e maduro (journal)"	"on"		\
+		xfs      "SGI's Xfs - Alto desempenho"					"off"		\
 		2>&1 >/dev/tty )
 
 	exit_status=$?
@@ -995,7 +994,7 @@ sh_choosetimezone() {
 	local coff='off'
 	local con='on'
 
-	timezone=$(${DIALOG} --title "Escolha o TIMEZONE"	\
+	timezone=$(${DIALOG} --title "** TIMEZONE **"	\
 		--colors 												\
 		--colors													\
 		--default-item "$_TIMEZONE"						\
@@ -1049,7 +1048,7 @@ sh_choosedisk() {
 
     	sd=$(${DIALOG}  																				\
     				--backtitle	 	"$ccabec - Configuração disco destino"					\
-    				--title 			"$cdisco"							  							\
+    				--title 			"** DISCO **"						  							\
     				--cancel-label "$buttonback"													\
     				--colors																				\
 	            --extra-button                                                    \
@@ -1132,11 +1131,13 @@ sh_confadduser()
    while true
    do
       exec 3>&1
-         usertext=$(${DIALOG}                         \
-         --backtitle       "$cmsgusermanager"         \
-         --insecure        "$@"                       \
-         --mixedform       "$ccreatenewuser"          \
-         0 0 0                                      	\
+         usertext=$(${DIALOG}				\
+         --title		"** EXTRA **"		\
+         --colors					         \
+         --backtitle	"$ccabec"			\
+         --insecure	"$@"					\
+         --mixedform	"$LABEL"				\
+         0 0 0									\
          "Nome Completo: "                        1 1 "${AsUser[cfullname]}"           1 28 40 0 0 \
          "Username: "                             2 1 "${AsUser[cuser]}"               2 28 20 0 0 \
          "Password user (${AsUser[cpass]}): "     3 1 "${AsUser[cpass]}"               3 28 20 0 1 \
@@ -1297,20 +1298,18 @@ sh_bootefi() {
 }
 
 sh_windowmanager() {
-	local cextra
-
-	wm=$(${DIALOG} --title "WINDOWS MANAGER"									\
+	wm=$(${DIALOG} --title "** GERENCIADOR DE JANELAS (wm) **"			\
 		--colors 																		\
-		--radiolist "$LABEL\n\nGerenciador de janelas:\n\n$cextra"		\
-		0 0 0																				\
-		tty     			"Somente terminal, sem interface gráfica"	"on"	\
+		--radiolist "$LABEL"															\
+		0 70 0																			\
 		fluxbox			"Fluxbox"											"off"	\
+		i3wm				"i3wm"												"off"	\
+		mate				"Mate"												"off"	\
 		openbox			"Openbox" 											"off"	\
 		plasma			"Kde Plasma-Desktop"								"off"	\
-		xfce4				"Xfce4"												"off"	\
-		i3wm				"i3wm"												"off"	\
 		sway				"Sway"												"off"	\
-		mate				"Mate"												"off"	\
+		tty     			"Somente terminal, sem interface gráfica"	"on"	\
+		xfce4				"Xfce4"												"off"	\
 		2>&1 >/dev/tty )
 
 	exit_status=$?
@@ -1324,7 +1323,7 @@ sh_windowmanager() {
 }
 
 sh_choosekeymap() {
-	if notconf "*** KEYBOARD ***" "Current layout : $_KEYMAP" "\n\n$cmsgSetKeyboardLayout?"; then
+	if notconf "*** TECLADO ***" "Layout atual : \Zb\Z1$_KEYMAP${RESET}" "\n\n$cmsgSetKeyboardLayout?"; then
 		LTECLADO=$true
 		return 0
 	fi
@@ -1517,20 +1516,19 @@ sh_menu() {
 			DEFITEM="Disco"
 		fi
 
-		AFTER_HOSTNAME="Locale"
       menu=$(${DIALOG}	--backtitle "$ccabec"				\
 			--colors														\
 			--default-item "$DEFITEM"								\
 			--extra-button --extra-label "Definições"			\
-			--title "void-install - menu de instalação"		\
+			--title "void-install - MENU DE INSTALAÇÃO"		\
 			--menu "$LABEL" 9 100 0									\
-			"Disco" 			"Definir Disco destino"				\
-			"FileSystem" 	"Definir Filesystem"					\
-			"BootLoader" 	"Definir Bootloader"					\
+			"Disco" 			"Definir disco destino"				\
+			"FileSystem" 	"Definir sistema de arquivos"		\
+			"BootLoader" 	"Definir bootloader"					\
 			"Teclado" 		"Definir teclado do sistema"		\
-			"Timezone" 		"Definir timezone"					\
+			"Timezone" 		"Definir fuso horário"				\
 			"Wm" 				"Definir gerenciador de janela"	\
-			"Extra" 			"Definir Usuario,senha,hostname"	\
+			"Extra" 			"Definir usuario,senha,hostname"	\
 			"Instalar" 		"Iniciar instalação" 				\
 			"Sair" 			"Encerrar instalação" 2>&1 >/dev/tty )
 
@@ -1549,7 +1547,7 @@ sh_menu() {
         	"Wm") 			sh_windowmanager    && [ -n "$LWM" ]    	   && DEFITEM="Extra";;
         	"Extra") 		sh_confadduser      && [ -n "$LEXTRA" ]    	&& DEFITEM="Instalar";;
    		"Instalar") 	sh_install;;
-        	"Sair")			die "Instalação abortada...";;
+        	"Sair")			die "Instalação foi abortada...";;
 	      *) 				${DIALOG} --title "$ccabec" --yesno "\nSair do instalador sem instalar?" 8 70 && die
 		esac
 	done
