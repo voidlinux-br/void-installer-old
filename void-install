@@ -35,7 +35,8 @@
 
 #system
 readonly APP="${0##*/}"
-readonly _VERSION_='0.55.149-20230110'
+readonly _VERSION_='0.55.150-20230110'
+readonly	distro=$(uname -n)
 readonly DEPENDENCIES=(tar sed cat grep chroot printf blkid fdisk mkfs.ext2 mkfs.ext3 mkfs.ext4 mkfs.btrfs mkfs.xfs mkfs.vfat dialog sfdisk lsblk parted)
 declare -A AsUser
 declare -i quiet=0 grafico=0
@@ -229,6 +230,7 @@ sh_checktarball() {
 }
 
 sh_checkDependencies() {
+	local d
 	local errorFound=0
 	declare -a missing
 
@@ -239,19 +241,19 @@ sh_checkDependencies() {
 		echo "${yellow}--------------IMPOSSÍVEL CONTINUAR-------------${reset}"
 		echo "Esse script precisa dos comandos listados acima" >&2
 		echo "Instale-os e/ou verifique se estão no seu \$PATH" >&2
+		echo "${yellow}-----------------------------------------------${reset}"
 
-		local distro=$(uname -n)
 		if [[ "$distro" = 'void' ]] ; then
 			echo
-			if readconf "Instalar o(s) comando(s) '${cyan}${missing[*]}${reset}'?"; then
+			if readconf "${yellow}Instalar o(s) comando(s) '${cyan}${missing[*]}${reset}'?"; then
 				if xbps-install -S "${missing[*]}"; then
-					die "Rode novamente o aplicativo"
+					die "INFO: Rode novamente o aplicativo"
 				else
-					die "Erro na instalação. Tente manualmente."
+					die "ERRO na instalação dos comandos. Tente manualmente."
 				fi
 			fi
 		fi
-		die "Instalação abortada..."
+		die "ERRO: Instalação abortada..."
 	fi
 }
 
