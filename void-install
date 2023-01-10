@@ -3,7 +3,7 @@
 
 #  void-install
 #  Created: 2022/12/24
-#  Altered: 2023/01/09
+#  Altered: 2023/01/10
 #
 #  Copyright (c) 2022-2023, Vilmar Catafesta <vcatafesta@gmail.com>
 #                2022-2023, Felipe Nogueira <contato.fnog@gmail.com>
@@ -34,9 +34,9 @@
 #set -x
 
 #system
-APP="${0##*/}"
-_VERSION_='0.54.122-20230109'
-readonly DEPENDENCIES=(tar sed cat grep chroot tput printf blkid fdisk mkfs.ext2 mkfs.ext3 mkfs.ext4 mkfs.ext2 mkfs.btrfs mkfs.xfs mkfs.vfat dialog sfdisk lsblk parted)
+readonly APP="${0##*/}"
+readonly _VERSION_='0.55.149-20230110'
+readonly DEPENDENCIES=(tar sed cat grep chroot printf blkid fdisk mkfs.ext2 mkfs.ext3 mkfs.ext4 mkfs.btrfs mkfs.xfs mkfs.vfat dialog sfdisk lsblk parted)
 declare -A AsUser
 declare -i quiet=0 grafico=0
 declare -i LAUTO=0 LINSTALL=0 LCHROOT=0 LBIND=0
@@ -44,16 +44,16 @@ declare _DEVICE='/dev/sdX'
 declare _PART_BIOS="${_DEVICE}1"
 declare _PART_BOOT="${_DEVICE}2"
 declare _PART_ROOT="${_DEVICE}3"
-declare _USER="void"
-declare _USER_FULLNAME=""
-declare _PASSWD_USER="void"
-declare _PASSWD_ROOT="voidlinux"
-declare _HOSTNAME="voidlinux"
-declare _WINDOWMANAGER="tty"
-declare _TIMEZONE="America/Sao_Paulo"
-declare _KEYMAP="br-abnt2"
-declare _CLOCK="UTC"
-declare _PKGS="vim neofetch pfetch openssh zstd wget curl lynx dialog bash-completion git unzip zip"
+declare _USER='void'
+declare _USER_FULLNAME=''
+declare _PASSWD_USER='void'
+declare _PASSWD_ROOT='voidlinux'
+declare _HOSTNAME='voidlinux'
+declare _WINDOWMANAGER='tty'
+declare _TIMEZONE='America/Sao_Paulo'
+declare _KEYMAP='br-abnt2'
+declare _CLOCK='UTC'
+declare _PKGS='vim neofetch pfetch openssh zstd wget curl lynx dialog bash-completion git unzip zip'
 
 sh_ambiente() {
 	readonly cnickefi='void'
@@ -65,18 +65,18 @@ sh_ambiente() {
 	readonly cmsgchgpasswd='Ajustando senha'
 	readonly cmsg_part_disk='Visualizar partições do disco'
 	readonly cmsgpart='Particionamento automatico'
-	readonly cwarning='** AVISO **'
 	readonly cmsg_all_mounted_part='O disco selecionado contém partições montadas'
 	readonly cmsgSetKeyboardLayout='Escolher outro layout do teclado'
 	readonly cmsg_umount_partition='Aguarde, Desmontando particao de trabalho'
 	readonly buttonback='Retornar'
 	readonly buttonpart='Info disco'
+	readonly cwarning='** AVISO **'
 	readonly yeslabel='Sim'
 	readonly nolabel='Não'
 	readonly true=1
 	readonly false=0
-	readonly err_fatal=1
-	readonly err_not_fatal=0
+	readonly err_fatal=$true
+	readonly err_not_fatal=$false
 	readonly shell='/bin/sh'
 	readonly BOOTLOG="/tmp/void-install-$(sh_diahora).log"
 	readonly LOGGER=/dev/tty8
@@ -85,6 +85,7 @@ sh_ambiente() {
 	: "${lEFI=$false}"
 	: "${ccabec="$APP v${_VERSION_}"}"
 	: "${DIALOG=${DIALOG:-"dialog"}}"
+
 	# flag dialog exit status codes
 	: "${D_OK=0}"
 	: "${D_CANCEL=1}"
@@ -93,6 +94,7 @@ sh_ambiente() {
 	: "${D_ITEM_HELP=4}"
 	: "${D_ESC=255}"
 
+	# flag dialog menu
 	: "${LDISCO=}"
 	: "${LFS=}"
 	: "${LGRUB=}"
@@ -103,18 +105,19 @@ sh_ambiente() {
 
 	# dialog colors
 	: "${BLACK="\Z0"}"
-	: "${RED="\Z1"}"
 	: "${GREEN="\Z2"}"
 	: "${YELLOW="\Z3"}"
 	: "${BLUE="\Z4"}"
 	: "${MAGENTA="\Z5"}"
-	: "${CYAN="\Z6"}"
 	: "${WHITE="\Z7"}"
 	: "${REVERSE="\Zr"}"
 	: "${UNDERLINE="\Zu"}"
+	CYAN="\Z6"
+	RED="\Z1"
 	BOLD="\Zb"
 	RESET="\Zn"
-	LABEL="${BOLD}Use as teclas PARA CIMA e PARA BAIXO para navegar.\nUse TAB para alternar entre os botões e ENTER para selecionar.${RESET}"
+	LABEL="${BOLD}Use as teclas ${RED}PARA CIMA ${RESET}e ${BOLD}${RED}PARA BAIXO ${RESET}para navegar.\n\
+Use ${BOLD}${RED}TAB ${RESET}para alternar entre os botões e ${BOLD}${RED}ENTER ${RESET}para selecionar."
 	: echo "$err_fatal"
 	: echo "$LAUTO"
 	: echo "$pink"
@@ -134,26 +137,26 @@ sh_ambiente() {
 	CURS_ZERO="\\033[0G"
 }
 
-sh_touchconf(){
-   cat > "$app_conf" <<- EOF
+sh_touchconf() {
+	cat > "$app_conf" <<- EOF
 ######################################################################
 # void-install.conf
 # Gerado por void-install
 ######################################################################
-_DEVICE="$_DEVICE"
-_PART_BIOS="$_PART_BIOS"
-_PART_BOOT="$_PART_BOOT"
-_PART_ROOT="$_PART_ROOT"
-_TARBALL_ROOTFS='void-x86_64-base-system-current.tar.xz'
-_USER="$_USER"
-_USER_FULLNAME="$_USER_FULLNAME"
-_PASSWD_USER="$_PASSWD_USER"
-_PASSWD_ROOT="$_PASSWD_ROOT"
-_HOSTNAME="$_HOSTNAME"
-_WINDOWMANAGER="$_WINDOWMANAGER"
-_TIMEZONE="$_TIMEZONE"
-_KEYMAP="$_KEYMAP"
-_CLOCK="$_CLOCK"
+_DEVICE=$_DEVICE
+_PART_BIOS=$_PART_BIOS
+_PART_BOOT=$_PART_BOOT
+_PART_ROOT=$_PART_ROOT
+_TARBALL_ROOTFS=void-x86_64-base-system-current.tar.xz
+_USER=$_USER
+_USER_FULLNAME=$_USER_FULLNAME
+_PASSWD_USER=$_PASSWD_USER
+_PASSWD_ROOT=$_PASSWD_ROOT
+_HOSTNAME=$_HOSTNAME
+_WINDOWMANAGER=$_WINDOWMANAGER
+_TIMEZONE=$_TIMEZONE
+_KEYMAP=$_KEYMAP
+_CLOCK=$_CLOCK
 _PKGS="$_PKGS"
 #end
 EOF
@@ -233,26 +236,58 @@ sh_checkDependencies() {
 		[[ -z $(command -v "$d") ]] && missing+=("$d") && errorFound=1 && printf '%s\n' "${red}ERRO${reset}: não encontrei o comando ${cyan}'$d'${reset}"
 	done
 	if (( errorFound )); then
-		echo "---IMPOSSÍVEL CONTINUAR---"
+		echo "${yellow}--------------IMPOSSÍVEL CONTINUAR-------------${reset}"
 		echo "Esse script precisa dos comandos listados acima" >&2
 		echo "Instale-os e/ou verifique se estão no seu \$PATH" >&2
-		exit 1
+
+		local distro=$(uname -n)
+		if [[ "$distro" = 'void' ]] ; then
+			echo
+			if readconf "Instalar o(s) comando(s) '${cyan}${missing[*]}${reset}'?"; then
+				if xbps-install -S "${missing[*]}"; then
+					die "Rode novamente o aplicativo"
+				else
+					die "Erro na instalação. Tente manualmente."
+				fi
+			fi
+		fi
+		die "Instalação abortada..."
 	fi
 }
 
 sh_setvarcolors() {
-	reset=$(tput sgr0);
-	green=$(tput setaf 2);
-	red=$(tput setaf 124);
-	bold=$(tput bold);
-	blue=$(tput setaf 33);
-	cyan=$(tput setaf 37);
-	orange=$(tput setaf 166);
-	pink=$(tput setaf 129)
-	white=$(tput setaf 15);
-	yellow=$(tput setaf 136);
-	#violet=$(tput setaf 61);
-	#purple=$(tput setaf 125);
+	# does the terminal support true-color?
+	if [[ $(tput colors) -eq 256 ]]; then
+		#tput setaf 127 | cat -v  #capturar saida
+		tput sgr0 # reset colors
+		bold=$(tput bold)
+		reset=$(tput sgr0)
+		black=$(tput setaf 0);
+		red=$(tput setaf 1)
+		green=$(tput setaf 2)
+		yellow=$(tput bold)$(tput setaf 3)
+		blue=$(tput setaf 4)
+		pink=$(tput setaf 5)
+		cyan=$(tput setaf 6)
+		white=$(tput setaf 7)
+		orange=$(tput setaf 3)
+		purple=$(tput setaf 125);
+		violet=$(tput setaf 61);
+	else   # doesn't support true-color
+		bold=''
+		reset="\e[0m"
+		blue="\e[1;34m"
+		cyan="\e[1;36m"
+		green="\e[1;32m"
+		orange="\e[1;33m"
+		red="\e[1;31m"
+		white="\e[1;37m"
+		yellow="\e[1;33m"
+		pink="\033[35;1m"
+		black="\e[1;30m";
+		purple="\e[1;35m";
+		violet="\e[1;35m";
+	fi
 }
 
 sh_unsetvarcolors() {
@@ -272,12 +307,12 @@ sh_unsetvarcolors() {
 }
 
 sh_logprefix() {
-   NORMAL="${reset}"            # Standard console grey
-   SUCCESS="${green}"           # Success is green
-   WARNING="${yellow}"          # Warnings are yellow
-   FAILURE="${red}"             # Failures are red
-   INFO="${cyan}"               # Information is light cyan
-   BRACKET="${blue}"            # Brackets are blue
+   NORMAL="${reset}"
+   SUCCESS="${green}"
+   WARNING="${yellow}"
+   FAILURE="${red}"
+   INFO="${cyan}"
+   BRACKET="${blue}"
    BMPREFIX="     "
    DOTPREFIX="  ${blue}::${reset} "
    SUCCESS_PREFIX="${SUCCESS}  *  ${NORMAL}"
@@ -416,8 +451,7 @@ die() {
 	exit 1
 }
 
-readconf()
-{
+readconf() {
 	read -r -p "$1 [Y/n]"
 	[[ ${REPLY^} == "" ]] && return $false
 	[[ ${REPLY^} == N ]]  && return $true || return $false
@@ -584,7 +618,7 @@ sh_set_keymap() {
 	evaluate_retval "$?"
 }
 
-sh_update_bashrc(){
+sh_update_bashrc() {
 	msg "INFO" "$(log_info_msg "Ajustando bashrc em $_PART_ROOT:$dir_install")" "$LINENO"
    [[ ! -e $dir_install/etc/bash/bashrc.d/bashrc.sh ]] && >| $dir_install/etc/bash/bashrc.d/bashrc.sh
 	if [[ -f $dir_install/etc/bash/bashrc.d/bashrc.sh ]]; then
@@ -593,7 +627,7 @@ sh_update_bashrc(){
 	evaluate_retval "$?"
 }
 
-sh_update_wpa_suplicant(){
+sh_update_wpa_suplicant() {
 	msg "INFO" "$(log_info_msg "Ajustando wpa_supplicant.conf em $_PART_ROOT:$dir_install")" "$LINENO"
    [[ ! -e $dir_install/etc/wpa_supplicant/wpa_supplicant.conf ]] && >| $dir_install/etc/wpa_supplicant/wpa_supplicant.conf
 	if [[ -f $dir_install/etc/wpa_supplicant/wpa_supplicant.conf ]]; then
@@ -637,25 +671,11 @@ sh_mkfs() {
 	evaluate_retval "$?"
 }
 
-sh_umountfs(){
+sh_umountfs() {
 	msg "INFO" "$(log_info_msg "Desmontando sistema de arquivo em $_PART_ROOT:$dir_install")" "$LINENO"
 	umount -frl "$dir_install" >>"$BOOTLOG" 2>&1
 	LBIND=$false
 	evaluate_retval "$?" "$err_not_fatal"
-}
-
-sh_bind() {
-	msg "INFO" "$(log_info_msg "Montando ambiente chroot em $_PART_ROOT:$dir_install")" "$LINENO"
-#	mount -t proc  /proc "$dir_install/proc" >>"$BOOTLOG" 2>&1
-#	mount -t sysfs /sys  "$dir_install/sys"  >>"$BOOTLOG" 2>&1
-#	mount -o bind  /dev  "$dir_install/dev"  >>"$BOOTLOG" 2>&1
-	{
-		mount -t proc  /proc "$dir_install/proc"
-		mount -t sysfs /sys  "$dir_install/sys"
-		mount -o bind  /dev  "$dir_install/dev"
-	} >>"$BOOTLOG" 2>&1
-	LBIND=$true
-	evaluate_retval "$?"
 }
 
 sh_stopmount() {
@@ -711,15 +731,8 @@ sh_initbind() {
 
 sh_stopbind() {
 	local nchoice
+
 	msg "INFO" "$(log_info_msg "Desmontando ambiente chroot")" "$LINENO"
-#	umount -r "${dir_install}/proc" >>"$BOOTLOG" 2>&1
-#	umount -r "${dir_install}/sys"  >>"$BOOTLOG" 2>&1
-#	umount -r "$dir_install/sys/firmware/efi/efivars" >>"$BOOTLOG" 2>&1
-#	umount -r "${dir_install}/dev/shm" >>"$BOOTLOG" 2>&1
-#	umount -r "${dir_install}/dev/pts" >>"$BOOTLOG" 2>&1
-#	umount -r "${dir_install}/dev" >>"$BOOTLOG" 2>&1
-#	umount -r "${dir_install}/run" >>"$BOOTLOG" 2>&1
-#	umount -r "${dir_install}/tmp" >>"$BOOTLOG" 2>&1
 	{
 		umount -r "${dir_install}/proc"
 		umount -r "${dir_install}/sys"
@@ -732,6 +745,7 @@ sh_stopbind() {
 	} >>"$BOOTLOG" 2>&1
 	nchoice=$?
 	evaluate_retval 0
+
 	[[ $nchoice -eq 0 ]] && LBIND=$false
 	[[ $LBIND -eq $false ]] && return 0 || return 1
 }
@@ -826,7 +840,7 @@ sh_mountfs() {
 }
 
 sh_fluxboxminimal() {
-	local apkgs=('xorg-minimal' 'xinit' 'lxterminal' 'fluxbox' 'fbmenugen' 'dejavu-fonts-ttf' 'xterm' 'rxvt-unicode' 'xfce4-terminal'
+	local apkgs=('xorg-minimal' 'xorg-fonts' 'xinit' 'lxterminal' 'fluxbox' 'fbmenugen' 'dejavu-fonts-ttf' 'xterm' 'rxvt-unicode' 'xfce4-terminal'
 					 'pulseaudio' 'vlc' 'ristretto' 'mupdf' 'setxkbmap' 'Thunar' 'pcmanfm' 'firefox' 'firefox-i18n-pt-BR lxdm')
 
 	sh_chroot_job "Instalando pacotes do Fluxbox em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
@@ -838,27 +852,27 @@ sh_fluxboxminimal() {
 }
 
 sh_openboxminimal() {
-	local apkgs=('xorg-minimal' 'xinit' 'openbox' 'lxterminal' 'liberation-fonts-ttf' 'dejavu-fonts-ttf' 'xterm rxvt-unicode'
+	local apkgs=('xorg-minimal' 'xorg-fonts' 'xinit' 'openbox' 'lxterminal' 'liberation-fonts-ttf' 'dejavu-fonts-ttf' 'xterm' 'rxvt-unicode'
 					 'xfce4-terminal' 'obconf' 'lxdm' 'lxappearance' 'lxinput' 'lxrandr' 'pulseaudio' 'vlc' 'ristretto' 'mupdf'
 					 'setxkbmap' 'Thunar' 'pcmanfm' 'firefox' 'firefox-i18n-pt-BR')
 	sh_chroot_job "Instalando pacotes do Openbox em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
 }
 
 sh_plasmaminimal() {
-	local apkgs=('xorg-minimal' 'plasma-desktop' 'xterm' 'lxdm' 'lxterminal' 'xfce4-terminal' 'NetworkManager'
+	local apkgs=('xorg-minimal' 'xorg-fonts' 'plasma-desktop' 'xterm' 'lxdm' 'lxterminal' 'xfce4-terminal' 'NetworkManager'
 					 'pulseaudio' 'vlc' 'ristretto' 'mupdf' 'setxkbmap' 'firefox' 'firefox-i18n-pt-BR')
 	sh_chroot_job "Instalando pacotes do Plasma-Desktop em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
 }
 
 sh_xfce4minimal() {
-	local apkgs=('xorg-minimal' 'xfce4' 'xterm' 'lxdm' 'lxterminal' 'xfce4-terminal' 'NetworkManager'
+	local apkgs=('xorg-minimal' 'xorg-fonts' 'xfce4' 'xterm' 'lxdm' 'lxterminal' 'xfce4-terminal' 'NetworkManager'
 					 'pulseaudio' 'pavucontrol' 'vlc' 'ristretto' 'mupdf' 'setxkbmap' 'firefox' 'firefox-i18n-pt-BR'
 					 'xfce4-whiskermenu-plugin' 'xfce4-pulseaudio-plugin' 'network-manager-applet' 'xfce4-screenshooter')
 	sh_chroot_job "Instalando pacotes do Xfce4 em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
 }
 
 sh_i3minimal() {
-	local apkgs=('xorg-minimal' 'i3' 'dmenu' 'i3status' 'xterm' 'lxdm' 'lxterminal' 'xfce4-terminal' 'NetworkManager'
+	local apkgs=('xorg-minimal' 'xorg-fonts' 'i3' 'dmenu' 'i3status' 'xterm' 'lxdm' 'lxterminal' 'xfce4-terminal' 'NetworkManager'
 					 'i3lock' 'geany' 'volumeicon' 'xfce4-clipman-plugin' 'mc' 'scrot' 'ImageMagick' 'dejavu-fonts-ttf'
 					 'lxappearance' 'gnome-themes-standard' 'axel' 'pavucontrol' 'pasystray' 'mps-youtube' 'youtube-dl' 'mpv' 'xarchiver'
 					 'cava' 'mate-themes' 'pulseaudio' 'vlc' 'ristretto' 'mupdf' 'setxkbmap' 'pcmanfm' 'firefox' 'firefox-i18n-pt-BR')
@@ -866,18 +880,25 @@ sh_i3minimal() {
 }
 
 sh_swayminimal() {
-	local apkgs=('xorg-minimal' 'sway' 'xterm' 'lxdm' 'lxterminal' 'xfce4-terminal' 'NetworkManager'
+	local apkgs=('xorg-minimal' 'xorg-fonts' 'sway' 'xterm' 'lxdm' 'lxterminal' 'xfce4-terminal' 'NetworkManager'
 					 'pulseaudio' 'vlc' 'ristretto' 'mupdf' 'setxkbmap' 'firefox' 'firefox-i18n-pt-BR')
 	sh_chroot_job "Instalando pacotes do Sway em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
 }
 
 sh_mateminimal() {
-	local apkgs=('xorg-minimal' 'mate' 'mate-extra' 'mate-applets' 'xterm' 'lxdm' 'lxterminal' 'xfce4-terminal' 'NetworkManager'
+	local apkgs=('xorg-minimal' 'xorg-fonts' 'mate' 'mate-extra' 'mate-applets' 'xterm' 'lxdm' 'lxterminal' 'xfce4-terminal' 'NetworkManager'
 					 'atril' 'caja-image-converter' 'caja-open-terminal' 'caja-sendto' 'caja-share' 'caja-wallpaper'
 					 'caja-xattr-tags' 'engrampa' 'eom' 'mate-calc' 'mate-icon-theme-faenza' 'mate-media' 'mate-netbook'
 					 'mate-power-manager' 'mate-screensaver' 'mate-sensors-applet' 'mate-system-monitor' 'mate-terminal' 'mate-utils'
 					 'mozo' 'pluma' 'pulseaudio' 'pavucontrol' 'vlc' 'ristretto' 'mupdf' 'setxkbmap' 'firefox' 'firefox-i18n-pt-BR')
 	sh_chroot_job "Instalando pacotes do Mate em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
+}
+
+sh_twmminimal() {
+	local apkgs=('xorg-minimal' 'xorg-fonts' 'xinit' 'twm' 'lxterminal' 'liberation-fonts-ttf' 'dejavu-fonts-ttf' 'xterm' 'rxvt-unicode'
+					 'xfce4-terminal' 'lxdm' 'lxappearance' 'lxinput' 'lxrandr' 'pulseaudio' 'vlc' 'ristretto' 'mupdf'
+					 'setxkbmap' 'Thunar' 'pcmanfm' 'firefox' 'firefox-i18n-pt-BR')
+	sh_chroot_job "Instalando pacotes do Twm em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
 }
 
 sh_backup_partitions() {
@@ -1000,7 +1021,6 @@ sh_choosefilesystem() {
 }
 
 sh_choosetimezone() {
-
 	timezone=$(${DIALOG} --title "** TIMEZONE **"	\
 		--colors 												\
 		--colors													\
@@ -1209,7 +1229,6 @@ sh_confadduser() {
 					_PASSWD_USER="${AsUser[cpass]}"
 					_PASSWD_ROOT="${AsUser[cpassroot]}"
 					_HOSTNAME="${AsUser[chostname]}"
-					sh_touchconf
 					log_wait_msg 'Configurações efetuadas. Prosseguindo com instalação.'
 					LEXTRA=$true
 					#evaluate_retval "$?"
@@ -1240,10 +1259,9 @@ ${orange}usage: ${APP} ${reset}[<options>]
 [<options>] ${reset}
    ${red}-i  --install${cyan}       # Instalar
    ${red}-c  --chroot${cyan}        # Rodar chroot na partição instalada
-   ${red}-a  --auto${cyan}          # automatically configure/write in /etc/xbps.d/ with result obtained results
    ${red}-g  --grafico${cyan}       # Ativar modo grafico
    ${red}-q  --quiet${cyan}         # Saida resumida
-   ${red}-V  --version${cyan}       # Mostrar versao do aplicativo
+   ${red}-v  --version${cyan}       # Mostrar versao do aplicativo
    ${red}-n  --nocolor${cyan}       # Remove cores da saida
    ${red}-h  --help${cyan}          # Este help${reset}
 EOF
@@ -1256,7 +1274,7 @@ init() {
 				sh_usage
 				exit $(($# ? 0 : 1))
 				;;
-			-V | --version)
+			-v | -V | --version)
 				sh_version
 				exit $(($# ? 0 : 1))
 				;;
@@ -1268,9 +1286,6 @@ init() {
 				;;
 			-g | --grafico)
 				grafico=1
-				;;
-			-a | --auto)
-				LAUTO=1
 				;;
 			-i | -I | --install)
 				LINSTALL=1
@@ -1317,6 +1332,7 @@ sh_windowmanager() {
 		openbox			"Openbox" 											"off"	\
 		plasma			"Kde Plasma-Desktop"								"off"	\
 		sway				"Sway"												"off"	\
+		twm				"Twm"													"off"	\
 		xfce4				"Xfce4"												"off"	\
 		2>&1 >/dev/tty )
 
@@ -1502,6 +1518,7 @@ sh_install() {
 			"xfce4")		sh_xfce4minimal;;
 			"i3wm")		sh_i3minimal;;
 			"sway")		sh_swayminimal;;
+			"twm")		sh_twmminimal;;
 			"mate")		sh_mateminimal;;
 		esac
 
@@ -1530,6 +1547,7 @@ sh_menu() {
 		menu=$(${DIALOG}	--backtitle "$ccabec"				\
 			--colors														\
 			--default-item "$DEFITEM"								\
+			--cancel-label "Sair"									\
 			--extra-button --extra-label "Definições"			\
 			--title "void-install - MENU DE INSTALAÇÃO"		\
 			--menu "$LABEL" 9 100 0									\
@@ -1564,9 +1582,9 @@ sh_menu() {
 	done
 }
 
+sh_setvarcolors
 sh_ambiente
 sh_ascii_lines
-sh_setvarcolors
 sh_logprefix
 sh_checkDependencies
 sh_config
