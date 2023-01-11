@@ -3,7 +3,7 @@
 
 #  void-install
 #  Created: 2022/12/24
-#  Altered: 2023/01/10
+#  Altered: 2023/01/11
 #
 #  Copyright (c) 2022-2023, Vilmar Catafesta <vcatafesta@gmail.com>
 #                2022-2023, Felipe Nogueira <contato.fnog@gmail.com>
@@ -35,7 +35,7 @@
 
 #system
 readonly APP="${0##*/}"
-readonly _VERSION_='0.58.189-20230110'
+readonly _VERSION_='0.61.215-20230111'
 readonly	distro=$(uname -n)
 readonly DEPENDENCIES=(tar sed cat grep chroot printf blkid fdisk mkfs.ext2 mkfs.ext3 mkfs.ext4 mkfs.btrfs mkfs.xfs mkfs.vfat dialog sfdisk lsblk parted)
 declare -A AsUser
@@ -45,6 +45,8 @@ declare _DEVICE='/dev/sdX'
 declare _PART_BIOS="${_DEVICE}1"
 declare _PART_BOOT="${_DEVICE}2"
 declare _PART_ROOT="${_DEVICE}3"
+declare _FILESYSTEM='ext4'
+declare _BOOTLOADER='bios'
 declare _USER='void'
 declare _USER_FULLNAME=''
 declare _PASSWD_USER='void'
@@ -55,15 +57,15 @@ declare _TIMEZONE='America/Sao_Paulo'
 declare _KEYMAP='br-abnt2'
 declare _CLOCK='UTC'
 declare _PKGS='vim neofetch pfetch openssh zstd wget curl lynx dialog bash-completion git unzip zip'
-declare xorg=('xorg-minimal' 'xinit' 'xterm' 'xorg-fonts')
-declare displaymanager=('lxdm' 'lxappearance' 'lxinput' 'lxrandr')
-declare media=('pulseaudio' 'pavucontrol' 'vlc')
-declare terminal=('lxterminal' 'rxvt-unicode' 'xfce4-terminal')
-declare filemanager=('Thunar' 'pcmanfm' 'xfce4-terminal')
-declare fonts=('liberation-fonts-ttf' 'dejavu-fonts-ttf')
-declare browsers=('firefox' 'firefox-i18n-pt-BR')
-declare cosmeticos=('setxkbmap' 'numlockx' 'nitrogen' 'ristretto')
-declare network=('NetworkManager' 'network-manager-applet')
+declare aXorg=('xorg-minimal' 'xinit' 'xterm' 'xorg-fonts')
+declare aDisplaymanager=('lxdm' 'lxappearance' 'lxinput' 'lxrandr')
+declare aMedia=('pulseaudio' 'pavucontrol' 'vlc')
+declare aTerminal=('lxterminal' 'rxvt-unicode' 'xfce4-terminal')
+declare aFilemanager=('Thunar' 'pcmanfm' 'xfce4-terminal')
+declare aFont=('liberation-fonts-ttf' 'dejavu-fonts-ttf')
+declare aBrowser=('firefox' 'firefox-i18n-pt-BR')
+declare aCosmetico=('setxkbmap' 'numlockx' 'nitrogen' 'ristretto')
+declare aNetwork=('NetworkManager' 'network-manager-applet')
 
 sh_ambiente() {
 	readonly cnickefi='void'
@@ -80,7 +82,6 @@ sh_ambiente() {
 	readonly cmsg_umount_partition='Aguarde, Desmontando particao de trabalho'
 	readonly buttonback='Retornar'
 	readonly buttonpart='Info disco'
-	readonly cwarning='** AVISO **'
 	readonly yeslabel='Sim'
 	readonly nolabel='Não'
 	readonly true=1
@@ -90,8 +91,6 @@ sh_ambiente() {
 	readonly shell='/bin/sh'
 	readonly BOOTLOG="/tmp/void-install-$(sh_diahora).log"
 	readonly LOGGER=/dev/tty8
-	: "${mkfs=EXT4}"
-	: "${mbr=BIOS}"
 	: "${lEFI=$false}"
 	: "${ccabec="$APP v${_VERSION_}"}"
 	: "${DIALOG=${DIALOG:-"dialog"}}"
@@ -131,7 +130,6 @@ Use ${BOLD}${RED}TAB ${RESET}para alternar entre os botões e ${BOLD}${RED}ENTER
 	: echo "$err_fatal"
 	: echo "$LAUTO"
 	: echo "$pink"
-	: echo "$cwarning"
 	: echo "$cmsgchgpasswd"
 	: echo "$url_google"
 
@@ -157,6 +155,8 @@ _DEVICE=$_DEVICE
 _PART_BIOS=$_PART_BIOS
 _PART_BOOT=$_PART_BOOT
 _PART_ROOT=$_PART_ROOT
+_FILESYSTEM=$_FILESYSTEM
+_BOOTLOADER=$_BOOTLOADER
 _TARBALL_ROOTFS=void-x86_64-base-system-current.tar.xz
 _USER=$_USER
 _USER_FULLNAME="$_USER_FULLNAME"
@@ -551,13 +551,13 @@ sh_mkparted() {
 				die "Erro de leitura de disco: $_DEVICE. Check configuração em $app_conf"
 			fi
 			replicate "=" "$COLUMNS"
-			echo "${red}AVISO, CUIDADO, tudo será apagado!!${reset}"
-			replicate "=" "$COLUMNS"
+			echo "${yellow}** AVISO: ${red}os dados nas partições serão COMPLETAMENTE DESTRUÍDOS para novos filesystems!!${reset}"
+#			replicate "=" "$COLUMNS"
 		fi
 	fi
 
 	if ! (( grafico )); then
-		if readconf "Continuar com o particionamento em ${_DEVICE} ?"; then
+		if readconf "${red}Continuar com o particionamento em ${yellow}${_DEVICE} ${reset}?"; then
 			nchoice=$true
 		fi
 	else
@@ -636,6 +636,22 @@ sh_set_keymap() {
 		sed -i -e "s|KEYMAP=.*|KEYMAP=$_KEYMAP|g" "$dir_install/etc/rc.conf"
 		sed -i -e "s|#\?KEYMAP=.*|KEYMAP=$_KEYMAP|g" "$dir_install/etc/rc.conf"
 	fi
+	evaluate_retval "$?"
+}
+
+sh_set_Xkeymap() {
+	msg "INFO" "$(log_info_msg "Ajustando teclado ${_KEYMAP} (modo gráfico) em $_PART_ROOT:$dir_install")" "$LINENO"
+	[[ ! -d "$dir_install/etc/X11/xorg.conf.d" ]] && mkdir -p "$dir_install/etc/X11/xorg.conf.d"
+	[[ ! -e "$dir_install/etc/X11/xorg.conf.d/10-keyboard.conf" ]] && cat > "$dir_install/etc/X11/xorg.conf.d/10-keyboard.conf" <<- EOF
+Section "InputClass"
+	Identifier "Keyboard Br Abnt2"
+	MatchIsKeyboard "on"
+	Option "XkbModel" "pc105"
+	Option "XkbLayout" "br"
+	Option "XkbVariant" "abnt2"
+	Option "XKbOptions" ""
+EndSection
+EOF
 	evaluate_retval "$?"
 }
 
@@ -861,20 +877,22 @@ sh_mountfs() {
 }
 
 sh_X11minimal(){
-	sh_chroot_job "Instalando meta pacote Xorg em $_PART_ROOT:$dir_install" "xbps-install -y ${xorg[*]}"
-	sh_chroot_job "Instalando meta pacote Displaymanager em $_PART_ROOT:$dir_install" "xbps-install -y ${displaymanager[*]}"
-	sh_chroot_job "Instalando meta pacote Media em $_PART_ROOT:$dir_install" "xbps-install -y ${media[*]}"
-	sh_chroot_job "Instalando meta pacote Terminal em $_PART_ROOT:$dir_install" "xbps-install -y ${terminal[*]}"
-	sh_chroot_job "Instalando meta pacote Filemanager em $_PART_ROOT:$dir_install" "xbps-install -y ${filemanager[*]}"
-	sh_chroot_job "Instalando meta pacote Fonts em $_PART_ROOT:$dir_install" "xbps-install -y ${fonts[*]}"
-	sh_chroot_job "Instalando meta pacote Browsers em $_PART_ROOT:$dir_install" "xbps-install -y ${browsers[*]}"
-	sh_chroot_job "Instalando meta pacote Cosmeticos em $_PART_ROOT:$dir_install" "xbps-install -y ${cosmeticos[*]}"
-	sh_chroot_job "Instalando meta pacote Network em $_PART_ROOT:$dir_install" "xbps-install -y ${network[*]}"
+	local apkgs=()
+	apkgs+=("${aXorg[@]}")
+	apkgs+=("${aFont[@]}")
+	apkgs+=("${aDisplaymanager[@]}")
+	apkgs+=("${aTerminal[@]}")
+	apkgs+=("${aFilemanager[@]}")
+	apkgs+=("${aBrowser[@]}")
+	apkgs+=("${aNetwork[@]}")
+	apkgs+=("${aMedia[@]}")
+	apkgs+=("${aCosmetico[@]}")
+	sh_chroot_job "Instalando meta pacotes X em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
 }
 
 sh_fluxboxminimal() {
 	local apkgs=('fluxbox' 'fbmenugen')
-	sh_chroot_job "Instalando pacotes do Fluxbox em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
+	sh_chroot_job "Instalando Fluxbox em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
 #	sh_chroot_job "Gerando menu customizado do fluxbox em $_PART_ROOT:$dir_install" "fbmenugen -i -o /home/${AsUser[cuser]}/.fluxbox/menu" "$err_not_fatal"
 	if [[ -f "$dir_install/home/${AsUser[cuser]}/.fluxbox/startup" ]]; then
 		sed -e "/xmodmap/s//# xmodmap/" -i "$dir_install/home/${AsUser[cuser]}/.fluxbox/startup" >>"$BOOTLOG" 2>&1
@@ -884,38 +902,39 @@ sh_fluxboxminimal() {
 
 sh_openboxminimal() {
 	local apkgs=('openbox' 'obconf')
-	sh_chroot_job "Instalando pacotes do Openbox em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
+	sh_chroot_job "Instalando Openbox em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
 }
 
 sh_plasmaminimal() {
 	local apkgs=('plasma-desktop')
-	sh_chroot_job "Instalando pacotes do Plasma-Desktop em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
+	sh_chroot_job "Instalando Plasma-Desktop em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
 }
 
 sh_xfce4minimal() {
 	local apkgs=('xfce4' 'xfce4-whiskermenu-plugin' 'xfce4-pulseaudio-plugin' 'xfce4-screenshooter' 'xfce4-clipman-plugin')
-	sh_chroot_job "Instalando pacotes do Xfce4 em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
+	sh_chroot_job "Instalando Xfce4 em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
 }
 
 sh_gnomeminimal() {
 	local apkgs=(xorg gnome dconf-editor devhelp Endeavour evolution five-or-more four-in-a-row geary
 					gedit ghex glade3 gnome-boxes gnome-builder gnome-chess gnome-connections
-					gnome-games-collection gnome-klotski gnome-mahjongg gnome-mime-data gnome-multi-writer gnome-nettool gnome-nibbles
-					gnome-recipes gnome-robots gnome-sound-recorder gnome-sudoku gnome-taquin gnome-terminal gnome-tetravex
-					gnome-tweaks gnome-usage hitori iagno lightsoff polari quadrapassel swell-foop sysprof tali)
-	sh_chroot_job "Instalando pacotes do Gnome em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
+					gnome-games-collection gnome-klotski gnome-mahjongg gnome-mime-data gnome-multi-writer
+					gnome-nettool gnome-nibbles gnome-recipes gnome-robots gnome-sound-recorder gnome-sudoku
+					gnome-taquin gnome-terminal gnome-tetravex gnome-tweaks gnome-usage hitori iagno lightsoff
+					polari quadrapassel swell-foop sysprof tali)
+	sh_chroot_job "Instalando Gnome em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
 }
 
 sh_i3minimal() {
 	local apkgs=('i3' 'dmenu' 'i3status' 'i3lock' 'geany' 'volumeicon' 'mc' 'scrot' 'ImageMagick'
 					 'gnome-themes-standard' 'axel' 'pasystray' 'mps-youtube' 'youtube-dl' 'mpv' 'xarchiver'
 					 'cava' 'mate-themes')
-	sh_chroot_job "Instalando pacotes do I3 em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
+	sh_chroot_job "Instalando I3 em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
 }
 
 sh_swayminimal() {
 	local apkgs=('sway')
-	sh_chroot_job "Instalando pacotes do Sway em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
+	sh_chroot_job "Instalando Sway em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
 }
 
 sh_mateminimal() {
@@ -923,17 +942,17 @@ sh_mateminimal() {
 					 'caja-share' 'caja-wallpaper' 'caja-xattr-tags' 'engrampa' 'eom' 'mate-calc' 'mate-icon-theme-faenza'
 					 'mate-media' 'mate-netbook' 'mate-power-manager' 'mate-screensaver' 'mate-sensors-applet' 'mate-system-monitor'
 					 'mate-terminal' 'mate-utils' 'mozo' 'pluma')
-	sh_chroot_job "Instalando pacotes do Mate em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
+	sh_chroot_job "Instalando Mate em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
 }
 
 sh_twmminimal() {
 	local apkgs=('twm')
-	sh_chroot_job "Instalando pacotes do Twm em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
+	sh_chroot_job "Instalando Twm em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
 }
 
 sh_awesomeminimal() {
 	local apkgs=('awesome')
-	sh_chroot_job "Instalando pacotes do Awesome em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
+	sh_chroot_job "Instalando Awesome em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
 }
 
 sh_backup_partitions() {
@@ -996,6 +1015,7 @@ sh_choosegrub() {
 	fi
 
 	mbr=$(${DIALOG} --title "** BOOTLOADER (GRUB) **"					\
+		--default-item "$_BOOTLOADER"											\
 		--colors 																	\
 		--radiolist "$LABEL\n\n$cextra"										\
 		0 0 0																			\
@@ -1017,6 +1037,7 @@ sh_choosegrub() {
 			fi
 			;;
 	esac
+	_BOOTLOADER=$mbr
 	LGRUB=$true
 }
 
@@ -1026,6 +1047,7 @@ sh_choosefilesystem() {
 
 	cextra="↓ é recomendável EXT4 ↓"
 	mkfs=$(${DIALOG} --title "** FILESYSTEM **"							\
+		--default-item "$_FILESYSTEM"											\
 		--colors 																	\
 		--radiolist "$LABEL\n\n$cextra"										\
 		10 70 0																		\
@@ -1042,14 +1064,15 @@ sh_choosefilesystem() {
 			return
 			;;
 	esac
+	_FILESYSTEM=$mkfs
 	LFS=$true
 }
 
 sh_choosetimezone() {
 	timezone=$(${DIALOG} --title "** TIMEZONE **"	\
+		--default-item "${_TIMEZONE#America/}"			\
 		--colors 												\
 		--colors													\
-		--default-item "$_TIMEZONE"						\
 		--radiolist "$LABEL"									\
 		0 70 0													\
 		Araguaina		"America/Araguaina"		"off"	\
@@ -1099,6 +1122,7 @@ sh_choosedisk() {
 		done
 
     	sd=$(${DIALOG}  																				\
+					--default-item "$_DEVICE"														\
     				--backtitle	 	"$ccabec - Configuração disco destino"					\
     				--title 			"** DISCO **"						  							\
     				--cancel-label "$buttonback"													\
@@ -1346,21 +1370,23 @@ sh_bootefi() {
 }
 
 sh_windowmanager() {
+	local con
 	wm=$(${DIALOG} --title "** GERENCIADOR DE JANELAS (wm) **"			\
+		--default-item "$_WINDOWMANAGER"											\
 		--colors 																		\
 		--radiolist "$LABEL"															\
 		0 70 0																			\
-		tty     			"Somente terminal, sem interface gráfica"	"on"	\
-		awesome			"Awesome"											"off"	\
-		fluxbox			"Fluxbox"											"off"	\
-		i3wm				"i3wm"												"off"	\
-		gnome				"Gnome"												"off"	\
-		mate				"Mate"												"off"	\
-		openbox			"Openbox" 											"off"	\
-		plasma			"Kde Plasma-Desktop"								"off"	\
-		sway				"Sway"												"off"	\
-		twm				"Twm"													"off"	\
-		xfce4				"Xfce4"												"off"	\
+		tty     			"Somente terminal, sem interface gráfica"	on		\
+		awesome			"Awesome"											off	\
+		fluxbox			"Fluxbox"											off	\
+		i3wm				"i3wm"												off	\
+		gnome				"Gnome"												off	\
+		mate				"Mate"												off	\
+		openbox			"Openbox" 											off	\
+		plasma			"Kde Plasma-Desktop"								off	\
+		sway				"Sway"												off	\
+		twm				"Twm"													off	\
+		xfce4				"Xfce4"												off	\
 		2>&1 >/dev/tty )
 
 	exit_status=$?
@@ -1539,16 +1565,16 @@ sh_install() {
 		sh_update_wpa_suplicant
 
 		case "$wm" in
-			"awesome") 	sh_X11minimal; sh_awesomeminimal;;
-			"fluxbox") 	sh_X11minimal; sh_fluxboxminimal;;
-			"openbox")	sh_X11minimal; sh_openboxminimal;;
-			"gnome")		sh_X11minimal; sh_gnomeminimal;;
-			"plasma")	sh_X11minimal; sh_plasmaminimal;;
-			"xfce4")		sh_X11minimal; sh_xfce4minimal;;
-			"i3wm")		sh_X11minimal; sh_i3minimal;;
-			"sway")		sh_X11minimal; sh_swayminimal;;
-			"twm")		sh_X11minimal; sh_twmminimal;;
-			"mate")		sh_X11minimal; sh_mateminimal;;
+			"awesome") 	sh_set_Xkeymap; sh_X11minimal; sh_awesomeminimal;;
+			"fluxbox") 	sh_X11minimal; sh_fluxboxminimal; sh_set_Xkeymap;;
+			"openbox")	sh_X11minimal; sh_openboxminimal; sh_set_Xkeymap;;
+			"gnome")		sh_X11minimal; sh_gnomeminimal; sh_set_Xkeymap;;
+			"plasma")	sh_X11minimal; sh_plasmaminimal; sh_set_Xkeymap;;
+			"xfce4")		sh_X11minimal; sh_xfce4minimal; sh_set_Xkeymap;;
+			"i3wm")		sh_X11minimal; sh_i3minimal; sh_set_Xkeymap;;
+			"sway")		sh_X11minimal; sh_swayminimal; sh_set_Xkeymap;;
+			"twm")		sh_X11minimal; sh_twmminimal; sh_set_Xkeymap;;
+			"mate")		sh_X11minimal; sh_mateminimal; sh_set_Xkeymap;;
 		esac
 
 		sh_mkservice
@@ -1617,6 +1643,7 @@ sh_ascii_lines
 sh_logprefix
 sh_checkDependencies
 sh_config
+sh_umountfs
 
 [[ -z $1 ]] && {
 	sh_usage
