@@ -35,7 +35,7 @@
 
 #system
 readonly APP="${0##*/}"
-readonly _VERSION_='0.63.230-20230112'
+readonly _VERSION_='0.63.232-20230112'
 readonly	distro=$(uname -n)
 readonly DEPENDENCIES=(tar sed cat grep chroot printf blkid fdisk mkfs.ext2 mkfs.ext3 mkfs.ext4 mkfs.btrfs mkfs.xfs mkfs.vfat dialog sfdisk lsblk parted efivar curl xz)
 declare -A AsUser
@@ -280,7 +280,7 @@ sh_checkDependencies() {
 
 sh_setvarcolors() {
 	# does the terminal support true-color?
-	if [[ $(tput colors) -eq 256 ]]; then
+	if ! [[ -z $(command -v "tput") ]]; then
 		#tput setaf 127 | cat -v  #capturar saida
 		tput sgr0 # reset colors
 		bold=$(tput bold)
@@ -1530,7 +1530,7 @@ sh_checkinstall() {
 
 sh_install() {
 	local abase=('base-system' 'dbus' 'lvm2' 'wireless_tools' 'nano' 'grub' 'grub-x86_64-efi'
-					 'efivar' 'efibootmgr' 'os-prober' 'intel-ucode' 'linux-firmware-amd' 'parted')
+					 'efivar' 'efibootmgr' 'os-prober' 'intel-ucode' 'linux-firmware-amd' 'parted' 'ncurses')
 
 	sh_checkinstall || return 1
 	sh_umountfs
