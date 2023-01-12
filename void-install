@@ -35,7 +35,7 @@
 
 #system
 readonly APP="${0##*/}"
-readonly _VERSION_='0.61.216-20230111'
+readonly _VERSION_='0.63.225-20230111'
 readonly	distro=$(uname -n)
 readonly DEPENDENCIES=(tar sed cat grep chroot printf blkid fdisk mkfs.ext2 mkfs.ext3 mkfs.ext4 mkfs.btrfs mkfs.xfs mkfs.vfat dialog sfdisk lsblk parted efivar)
 declare -A AsUser
@@ -1456,6 +1456,16 @@ sh_chmodtmp() {
 	evaluate_retval "$?" "$err_not_fatal"
 }
 
+sh_copiavoid-install() {
+	local cfile="void-install"
+
+	msg "INFO" "$(log_info_msg "Copiando void-install para $_PART_ROOT:$dir_install")" "$LINENO"
+	if [[ -e "$cfile" ]]; then
+		cp "$cfile" "$dir_install/usr/bin/" >>"$BOOTLOG" 2>&1
+	fi
+	evaluate_retval "$?" "$err_not_fatal"
+}
+
 display_config() {
 	[[ -z "$LDISCO"    ]] && local _device="não definido"     || local _device=${_DEVICE}
 	[[ -z "$LDISCO"    ]] && local _modelo="não definido"     || local _modelo=${SIZE_ORIGEM}/${MODEL_ORIGEM}
@@ -1549,7 +1559,7 @@ sh_install() {
 
 		sh_update_mirror
 		sh_chroot_job "Atualizando repositorio em $_PART_ROOT:$dir_install" "xbps-install -Suy xbps"
-		sh_chroot_job "Atualizando sistema em $_PART_ROOT:$dir_install" "xbps-install -uy"
+#		sh_chroot_job "Atualizando sistema em $_PART_ROOT:$dir_install" "xbps-install -uy"
 		sh_chroot_job "Instalando pacotes base em $_PART_ROOT:$dir_install" "xbps-install -y ${abase[*]}"
 		sh_chroot_job "Instalando pacotes adicionais em $_PART_ROOT:$dir_install" "xbps-install -y $_PKGS"
 
@@ -1590,6 +1600,7 @@ sh_install() {
 #		sh_chroot_job "Certificando que todos pacotes estejam configurados corretamente em $_PART_ROOT:$dir_install" "xbps-reconfigure -fa"
 #		sh_chroot_job "Removendo pacote bootstrap em $_PART_ROOT:$dir_install" "xbps-remove -y base-voidstrap" "$err_not_fatal"
 		sh_chmodtmp
+		sh_copiavoid-install
 		quiet=$false
 		alerta "$ccabec" "Instalação finalizada com sucesso."
 	else
