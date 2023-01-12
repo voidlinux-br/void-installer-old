@@ -35,7 +35,7 @@
 
 #system
 readonly APP="${0##*/}"
-readonly _VERSION_='0.63.225-20230111'
+readonly _VERSION_='0.63.226-20230111'
 readonly	distro=$(uname -n)
 readonly DEPENDENCIES=(tar sed cat grep chroot printf blkid fdisk mkfs.ext2 mkfs.ext3 mkfs.ext4 mkfs.btrfs mkfs.xfs mkfs.vfat dialog sfdisk lsblk parted efivar)
 declare -A AsUser
@@ -1530,7 +1530,7 @@ sh_checkinstall() {
 
 sh_install() {
 	local abase=('base-system' 'dbus' 'lvm2' 'wireless_tools' 'nano' 'grub' 'grub-x86_64-efi'
-					 'efivar' 'efibootmgr' 'os-prober' 'intel-ucode' 'linux-firmware-amd')
+					 'efivar' 'efibootmgr' 'os-prober' 'intel-ucode' 'linux-firmware-amd' 'parted')
 
 	sh_checkinstall || return 1
 	sh_umountfs
