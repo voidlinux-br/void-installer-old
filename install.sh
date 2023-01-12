@@ -4,17 +4,16 @@
 #sh <(wget https://raw.githubusercontent.com/voidlinux-br/void-installer/master/install.sh)
 
 {
-# Previne execucao se foi baixado apenas parcialmente
 oops() {
     echo "$0:" "$@" >&2
     exit 1
 }
 
 umask 0022
-url='https://raw.githubusercontent.com/voidlinux-br/void-installer/master'
+url="https://raw.githubusercontent.com/voidlinux-br/void-installer/master"
 files=('ChangeLog' 'INSTALL' 'LICENSE' 'MAINTAINERS' 'Makefile' 'README' 'README.md' 'void-install')
-tmpDir='~/github/void-installer'
-result="$(mkdir -p $tmpDir || oops "Não é possível criar diretório temporário para baixar arquivos")"
+tmpDir=~/void-installer
+[[ ! -d "$tmpDir" ]] && { mkdir "$tmpDir" || oops "Não é possível criar diretório temporário para baixar arquivos";}
 
 require_util() {
 	command -v "$1" > /dev/null 2>&1 ||
