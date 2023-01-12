@@ -36,4 +36,16 @@ do
 	cmdfetch "$url/$f" "$tmpDir/$f" || oops "falha no download '$url/$f'"
 done
 
+chmod +x $tmpDir/void-install
+ls -la $tmpDir
+
+echo
+echo "Entre em: $tmpDir e digite:"
+echo "sudo ./void-install -i"
+exit 0
+
 } # fim do wrapping
+
+
+
+

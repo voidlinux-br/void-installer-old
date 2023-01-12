@@ -3,7 +3,7 @@
 
 #  void-install
 #  Created: 2022/12/24
-#  Altered: 2023/01/11
+#  Altered: 2023/01/12
 #
 #  Copyright (c) 2022-2023, Vilmar Catafesta <vcatafesta@gmail.com>
 #                2022-2023, Felipe Nogueira <contato.fnog@gmail.com>
@@ -35,9 +35,9 @@
 
 #system
 readonly APP="${0##*/}"
-readonly _VERSION_='0.61.215-20230111'
+readonly _VERSION_='0.61.216-20230111'
 readonly	distro=$(uname -n)
-readonly DEPENDENCIES=(tar sed cat grep chroot printf blkid fdisk mkfs.ext2 mkfs.ext3 mkfs.ext4 mkfs.btrfs mkfs.xfs mkfs.vfat dialog sfdisk lsblk parted)
+readonly DEPENDENCIES=(tar sed cat grep chroot printf blkid fdisk mkfs.ext2 mkfs.ext3 mkfs.ext4 mkfs.btrfs mkfs.xfs mkfs.vfat dialog sfdisk lsblk parted efivar)
 declare -A AsUser
 declare -i quiet=0 grafico=0
 declare -i LAUTO=0 LINSTALL=0 LCHROOT=0 LBIND=0
@@ -56,16 +56,18 @@ declare _WINDOWMANAGER='tty'
 declare _TIMEZONE='America/Sao_Paulo'
 declare _KEYMAP='br-abnt2'
 declare _CLOCK='UTC'
-declare _PKGS='vim neofetch pfetch openssh zstd wget curl lynx dialog bash-completion git unzip zip'
-declare aXorg=('xorg-minimal' 'xinit' 'xterm' 'xorg-fonts')
-declare aDisplaymanager=('lxdm' 'lxappearance' 'lxinput' 'lxrandr')
-declare aMedia=('pulseaudio' 'pavucontrol' 'vlc')
+declare _PKGS='vim neofetch pfetch openssh zstd wget curl dialog bash-completion git unzip zip'
+declare aXorg=('xorg-minimal' 'xinit' 'xterm' 'xorg-fonts' 'dbus-x11')
+declare aDisplaymanager=('lxdm' 'lxappearance' 'lxinput' 'lxrandr' 'lxtask')
+declare aMedia=('pulseaudio' 'pavucontrol' 'vlc' 'ffmpeg' 'gst-plugins-bad1' 'gst-plugins-good1' 'gst-plugins-ugly1' 'gst-plugins-base1')
 declare aTerminal=('lxterminal' 'rxvt-unicode' 'xfce4-terminal')
 declare aFilemanager=('Thunar' 'pcmanfm' 'xfce4-terminal')
-declare aFont=('liberation-fonts-ttf' 'dejavu-fonts-ttf')
-declare aBrowser=('firefox' 'firefox-i18n-pt-BR')
-declare aCosmetico=('setxkbmap' 'numlockx' 'nitrogen' 'ristretto')
-declare aNetwork=('NetworkManager' 'network-manager-applet')
+declare aFont=('liberation-fonts-ttf' 'dejavu-fonts-ttf' 'fonts-droid-ttf' 'fonts-croscore-ttf')
+declare aBrowser=('firefox' 'firefox-i18n-pt-BR' 'lynx')
+declare aPerfumaria=('setxkbmap' 'numlockx' 'nitrogen' 'ristretto' 'mate-notification-daemon')
+declare aNetwork=('NetworkManager' 'network-manager-applet' 'gvfs' 'gvfs-smb' 'gvfs-cdda')
+declare aMicrode=('intel-ucode' 'linux-firmware-amd')
+declare aArchiver=('xarchiver' 'unrar' 'zip' 'p7zip' 'unzip' 'bzip2')
 
 sh_ambiente() {
 	readonly cnickefi='void'
@@ -886,12 +888,18 @@ sh_X11minimal(){
 	apkgs+=("${aBrowser[@]}")
 	apkgs+=("${aNetwork[@]}")
 	apkgs+=("${aMedia[@]}")
-	apkgs+=("${aCosmetico[@]}")
+	apkgs+=("${aPerfumaria[@]}")
+	apkgs+=("${aMicrocode[@]}")
+	apkgs+=("${aArchiver[@]}")
+
 	sh_chroot_job "Instalando meta pacotes X em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
 }
 
 sh_fluxboxminimal() {
 	local apkgs=('fluxbox' 'fbmenugen')
+			apkgs+=(cairo galculator-gtk2 adwaita-icon-theme gtk2-engines gtk-engine-murrine)
+			apkgs+=(wicd wicd-gtk qt5ct qt5-styleplugins leafpad dconf volumeicon feh viewnior compton arc-theme ffmpegthumbnailer)
+
 	sh_chroot_job "Instalando Fluxbox em $_PART_ROOT:$dir_install" "xbps-install -y ${apkgs[*]}"
 #	sh_chroot_job "Gerando menu customizado do fluxbox em $_PART_ROOT:$dir_install" "fbmenugen -i -o /home/${AsUser[cuser]}/.fluxbox/menu" "$err_not_fatal"
 	if [[ -f "$dir_install/home/${AsUser[cuser]}/.fluxbox/startup" ]]; then
@@ -1511,7 +1519,8 @@ sh_checkinstall() {
 }
 
 sh_install() {
-	local abase=('base-system' 'dbus' 'lvm2' 'wireless_tools' 'nano' 'grub' 'grub-x86_64-efi' 'efivar' 'efibootmgr' 'os-prober')
+	local abase=('base-system' 'dbus' 'lvm2' 'wireless_tools' 'nano' 'grub' 'grub-x86_64-efi'
+					 'efivar' 'efibootmgr' 'os-prober' 'intel-ucode' 'linux-firmware-amd')
 
 	sh_checkinstall || return 1
 	sh_umountfs
