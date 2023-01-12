@@ -13,6 +13,9 @@
 	- wget https://github.com/voidlinux-br/void-installer/raw/main/INSTALL
 	- wget https://github.com/voidlinux-br/void-installer/raw/main/ChangeLog
 
+- 3 - usando bash e curl
+	- sh <(curl -L https://raw.githubusercontent.com/voidlinux-br/void-installer/master/install.sh)
+
 ## Instalação:
 - 1 - usando make
 	- sudo make install
