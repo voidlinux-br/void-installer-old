@@ -35,9 +35,9 @@
 
 #system
 readonly APP="${0##*/}"
-readonly _VERSION_='0.63.228-20230112'
+readonly _VERSION_='0.63.230-20230112'
 readonly	distro=$(uname -n)
-readonly DEPENDENCIES=(tar sed cat grep chroot printf blkid fdisk mkfs.ext2 mkfs.ext3 mkfs.ext4 mkfs.btrfs mkfs.xfs mkfs.vfat dialog sfdisk lsblk parted efivar curl xz)
+readonly DEPENDENCIES=(tar sed cat grep chroot printf blkid fdisk mkfs.ext2 mkfs.ext3 mkfs.ext4 mkfs.btrfs mkfs.xfs mkfs.vfat dialog sfdisk lsblk parted efivar curl xz tput)
 declare -A AsUser
 declare -i quiet=0 grafico=0
 declare -i LAUTO=0 LINSTALL=0 LCHROOT=0 LBIND=0
@@ -296,20 +296,19 @@ sh_setvarcolors() {
 		orange=$(tput setaf 3)
 		purple=$(tput setaf 125);
 		violet=$(tput setaf 61);
-	else   # doesn't support true-color
+	else
+		reset=''
+		green=''
+		red=''
 		bold=''
-		reset="\e[0m"
-		blue="\e[1;34m"
-		cyan="\e[1;36m"
-		green="\e[1;32m"
-		orange="\e[1;33m"
-		red="\e[1;31m"
-		white="\e[1;37m"
-		yellow="\e[1;33m"
-		pink="\033[35;1m"
-		black="\e[1;30m";
-		purple="\e[1;35m";
-		violet="\e[1;35m";
+		blue=''
+		cyan=''
+		orange=''
+		pink=''
+		white=''
+		yellow=''
+		#violet=''
+		#purple=''
 	fi
 }
 
@@ -1112,6 +1111,7 @@ sh_choosetimezone() {
 }
 
 sh_choosedisk() {
+	sh_umountfs
 	while true
 	do
 		sh_disk_info
@@ -1663,7 +1663,6 @@ sh_ascii_lines
 sh_logprefix
 sh_checkDependencies
 sh_config
-sh_umountfs
 
 [[ -z $1 ]] && {
 	sh_usage
